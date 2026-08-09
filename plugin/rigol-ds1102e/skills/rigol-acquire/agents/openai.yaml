@@ -1,0 +1,4 @@
+interface:
+  display_name: "Wait & Acquire"
+  short_description: "Wait for stable probe contact and capture"
+  default_prompt: "Use $rigol-acquire to wait for stable probe contact and capture qualified DS1102E waveforms."

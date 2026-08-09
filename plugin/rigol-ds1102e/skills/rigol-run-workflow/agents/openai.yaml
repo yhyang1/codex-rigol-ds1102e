@@ -1,0 +1,4 @@
+interface:
+  display_name: "Run Bench Workflow"
+  short_description: "Wait, capture, verify, analyze, and interpret"
+  default_prompt: "Use $rigol-run-workflow to run the complete waiting acquisition and analysis workflow."

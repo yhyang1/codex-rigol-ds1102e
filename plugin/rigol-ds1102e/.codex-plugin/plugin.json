@@ -1,0 +1,22 @@
+{
+  "name": "rigol-ds1102e",
+  "version": "0.1.0+codex.20260809091252",
+  "description": "Wait-aware USB acquisition, analysis, and evidence-bounded interpretation for the RIGOL DS1102E.",
+  "author": {
+    "name": "yangmeng",
+    "email": "yhyang1@gmail.com"
+  },
+  "skills": "./skills/",
+  "interface": {
+    "displayName": "RIGOL DS1102E Bench",
+    "shortDescription": "Wait, acquire, analyze, and interpret CH1 waveforms.",
+    "longDescription": "Controls a USB-connected RIGOL DS1102E, waits through missing or intermittent probe contact, retains qualified captures, verifies artifacts, analyzes pulse waveforms, and produces evidence-bounded reports.",
+    "developerName": "yangmeng",
+    "category": "Developer Tools",
+    "capabilities": [
+      "Interactive",
+      "Write"
+    ],
+    "defaultPrompt": "Wait for stable probe contact, capture ten qualified CH1 waveforms, analyze them, and explain the evidence."
+  }
+}

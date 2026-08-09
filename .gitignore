@@ -1,0 +1,43 @@
+# Python environments and dependency caches
+.venv/
+.venv-*/
+.uv-cache/
+
+# Python bytecode and tool caches
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+.coverage.*
+htmlcov/
+
+# Python packaging output
+build/
+dist/
+*.egg-info/
+
+# Local environment and secret files
+.env
+.env.*
+!.env.example
+
+# IDE and editor state
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# Logs and temporary files
+*.log
+*.tmp
+
+# macOS metadata
+.DS_Store
+
+# Hardware acquisition artifacts
+captures/
+
+# Generated plugin runtime; canonical runtime source lives under src/
+plugin/rigol-ds1102e/runtime/
