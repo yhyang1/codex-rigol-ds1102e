@@ -13,6 +13,7 @@ from .analysis import analyze_capture, analyze_series
 from .config import load_config
 from .errors import DeviceIdentityError, RigolError, TriggerTimeoutError, WaveformDataError
 from .instrument import CaptureSession, VisaConnection, capture_once, identify
+from .paired_analysis import analyze_paired_series
 from .session import ContactGate, QualificationResult, assess_capture
 from .verify import verify_artifacts
 
@@ -90,6 +91,14 @@ def parser() -> argparse.ArgumentParser:
     series.add_argument("root", type=Path)
     series.add_argument("--channel", type=int, choices=(1, 2), default=1)
     series.add_argument("--nominal-frequency", type=_positive, required=True)
+    paired = commands.add_parser(
+        "analyze-paired-series",
+        help="analyze one trigger channel and one dependent pulse channel",
+    )
+    paired.add_argument("root", type=Path)
+    paired.add_argument("--trigger-channel", type=int, choices=(1, 2), required=True)
+    paired.add_argument("--strobe-channel", type=int, choices=(1, 2), required=True)
+    paired.add_argument("--expectations", type=Path)
     verify = commands.add_parser("verify", help="verify hashes and structure for a capture or run")
     verify.add_argument("path", type=Path)
     verify.add_argument("--output", type=Path, help="also persist the JSON verification report")
@@ -406,6 +415,14 @@ def main(argv: list[str] | None = None) -> int:
             return 0
         if args.command == "analyze-series":
             print(analyze_series(args.root, args.channel, args.nominal_frequency))
+            return 0
+        if args.command == "analyze-paired-series":
+            print(analyze_paired_series(
+                args.root,
+                args.trigger_channel,
+                args.strobe_channel,
+                args.expectations,
+            ))
             return 0
         if args.command == "verify":
             report = verify_artifacts(args.path)

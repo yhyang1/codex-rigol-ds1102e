@@ -12,6 +12,8 @@ uv run rigol verify captures/session --output captures/session/verification.json
 uv run rigol export-csv captures/20260809T120000.000000Z_000001
 uv run rigol analyze captures/20260809T120000.000000Z_000001 --nominal-frequency 1000
 uv run rigol analyze-series captures/watch-10 --nominal-frequency 1000
+uv run rigol analyze-paired-series captures/session \
+  --trigger-channel 1 --strobe-channel 2 --expectations expectations.json
 ```
 
 Use `--config config.toml` to apply an explicit acquisition profile. Without a
@@ -30,6 +32,14 @@ Absolute long-term phase and connector end-to-end phase are not measurable
 without a second independent timing reference. The reported RAW-buffer phase is
 diagnostic only. Frequency accuracy is relative to the oscilloscope sampling
 timebase unless that timebase has been externally calibrated.
+
+Synchronized two-channel captures can also be checked as a causal pulse pair.
+`analyze-paired-series` verifies the capture hashes first, detects hysteretic
+edges on both channels, pairs dependent pulses only inside complete consecutive
+trigger intervals, and reports trigger period/high width, trigger-to-dependent
+delay, dependent width, logic levels, and missing or extra pulses. Optional
+JSON expectations provide nominal timing and logic-level gates; the result is
+written atomically as `paired-series-analysis.json`.
 
 Example profile:
 
