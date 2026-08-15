@@ -14,8 +14,9 @@ from .instrument import Capture
 class QualificationResult:
     accepted: bool
     reasons: tuple[str, ...]
-    metrics: dict[str, float | int | None]
+    metrics: dict[str, Any]
     reference_frequency_hz: float | None
+    mode: str = "pulse"
 
 
 @dataclass(frozen=True)
@@ -99,6 +100,10 @@ def assess_capture(
     qualification: QualificationConfig,
     provisional_frequency_hz: float | None = None,
 ) -> QualificationResult:
+    if qualification.mode == "STATIC":
+        return _assess_static(capture, channel, qualification)
+    if qualification.mode != "PULSE":
+        raise ValueError(f"unsupported qualification mode: {qualification.mode}")
     waveform = capture.channels[channel]
     voltage = waveform.voltage_v
     vpp = float(np.max(voltage) - np.min(voltage))
@@ -125,6 +130,7 @@ def assess_capture(
             tuple(reasons),
             {"vpp_v": vpp, "frequency_hz": None, "complete_pulses": 0, "period_cv_percent": None},
             None,
+            "pulse",
         )
 
     analysis = analyze_pulse_waveform(capture.time_s, voltage, reference).values
@@ -156,6 +162,56 @@ def assess_capture(
             "period_cv_percent": period_cv,
         },
         reference_frequency_hz=reference,
+        mode="pulse",
+    )
+
+
+def _assess_static(
+    capture: Capture,
+    channel: int,
+    qualification: QualificationConfig,
+) -> QualificationResult:
+    voltage = capture.channels[channel].voltage_v
+    if voltage.ndim != 1 or not voltage.size or not np.all(np.isfinite(voltage)):
+        return QualificationResult(
+            accepted=False,
+            reasons=("static_waveform_invalid",),
+            metrics={"transitions_verified": False},
+            reference_frequency_hz=None,
+            mode="static",
+        )
+    minimum = float(np.min(voltage))
+    maximum = float(np.max(voltage))
+    median = float(np.median(voltage))
+    mean = float(np.mean(voltage))
+    vpp = maximum - minimum
+    matched_index: int | None = None
+    matched_window: tuple[float, float] | None = None
+    for index, window in enumerate(qualification.allowed_level_windows_v):
+        if window[0] <= median <= window[1]:
+            matched_index = index
+            matched_window = window
+            break
+    reasons: list[str] = []
+    if matched_window is None:
+        reasons.append("static_level_outside_allowed_windows")
+    if qualification.max_vpp_v is not None and vpp > qualification.max_vpp_v:
+        reasons.append("vpp_above_maximum")
+    return QualificationResult(
+        accepted=not reasons,
+        reasons=tuple(reasons),
+        metrics={
+            "median_v": median,
+            "mean_v": mean,
+            "minimum_v": minimum,
+            "maximum_v": maximum,
+            "vpp_v": vpp,
+            "matched_window_index": matched_index,
+            "matched_window_v": list(matched_window) if matched_window is not None else None,
+            "transitions_verified": False,
+        },
+        reference_frequency_hz=None,
+        mode="static",
     )
 
 

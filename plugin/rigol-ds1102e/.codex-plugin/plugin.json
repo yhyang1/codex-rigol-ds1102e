@@ -1,7 +1,7 @@
 {
   "name": "rigol-ds1102e",
-  "version": "0.1.0+codex.20260815050521",
-  "description": "Safe one- or two-probe USB acquisition, verification, analysis, and interpretation for the RIGOL DS1102E.",
+  "version": "0.1.0+codex.20260815060129",
+  "description": "Safe USB preflight, mixed pulse/static acquisition, verification, analysis, and interpretation for one or two RIGOL DS1102E probes.",
   "author": {
     "name": "yangmeng",
     "email": "yhyang1@gmail.com"
@@ -10,8 +10,8 @@
   "skills": "./skills/",
   "interface": {
     "displayName": "RIGOL DS1102E Bench",
-    "shortDescription": "Safely acquire and compare one or two probes.",
-    "longDescription": "Controls a USB-connected RIGOL DS1102E, qualifies one or two probe signals, preserves same-trigger CH1/CH2 captures, verifies artifacts, analyzes per-channel or paired pulse timing, restores scope state, and produces evidence-bounded reports.",
+    "shortDescription": "Preflight and acquire pulse or static probe signals.",
+    "longDescription": "Preflights a USB-connected RIGOL DS1102E without configuration writes, qualifies mixed pulse or static signal classes on one or two probes, preserves same-trigger CH1/CH2 captures, verifies artifacts, restores scope state, and produces evidence-bounded reports.",
     "developerName": "yangmeng",
     "category": "Developer Tools",
     "capabilities": [
@@ -19,7 +19,7 @@
       "Write"
     ],
     "defaultPrompt": [
-      "Safely capture and analyze both DS1102E probes.",
+      "Preflight and safely qualify pulse or static signals on both DS1102E probes.",
       "Wait for stable CH1 contact and analyze ten captures.",
       "Measure CH1-to-CH2 pulse delay from verified captures."
     ]

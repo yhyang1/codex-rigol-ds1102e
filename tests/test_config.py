@@ -80,3 +80,49 @@ def test_invalid_nested_qualification_range_is_rejected(tmp_path: Path) -> None:
     )
     with pytest.raises(ConfigurationError, match="qualification.channel2"):
         load_config(profile)
+
+
+def test_static_qualification_windows(tmp_path: Path) -> None:
+    profile = tmp_path / "static.toml"
+    profile.write_text(
+        """
+[qualification]
+min_vpp_v = 0.6
+[qualification.channel1]
+mode = "pulse"
+nominal_frequency_hz = 10
+[qualification.channel2]
+mode = "static"
+allowed_level_windows_v = [[-0.05, 0.08], [2.6, 3.1]]
+max_vpp_v = 0.1
+"""
+    )
+
+    config = load_config(profile)
+
+    assert config.qualification_for(1).mode == "PULSE"
+    assert config.qualification_for(2).mode == "STATIC"
+    assert config.qualification_for(2).min_vpp_v == 0.6
+    assert config.qualification_for(2).allowed_level_windows_v == (
+        (-0.05, 0.08),
+        (2.6, 3.1),
+    )
+
+
+@pytest.mark.parametrize(
+    ("body", "message"),
+    [
+        ('mode = "static"\n', "required"),
+        ('mode = "unknown"\n', "mode"),
+        ('mode = "static"\nallowed_level_windows_v = [[1, 1]]\n', "less than"),
+        ('mode = "static"\nallowed_level_windows_v = [[0, 1], [1, 2]]\n', "non-overlapping"),
+        ('mode = "static"\nallowed_level_windows_v = [[0, inf]]\n', "finite"),
+        ('mode = "pulse"\nallowed_level_windows_v = [[0, 1]]\n', "only valid"),
+    ],
+)
+def test_invalid_static_qualification_windows(tmp_path: Path, body: str, message: str) -> None:
+    profile = tmp_path / "bad-static.toml"
+    profile.write_text("[qualification.channel2]\n" + body)
+
+    with pytest.raises(ConfigurationError, match=message):
+        load_config(profile)

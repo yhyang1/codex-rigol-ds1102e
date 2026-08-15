@@ -3,8 +3,9 @@
 ## Scope
 
 This record validates the software/plugin increment for USB-controlled,
-same-trigger CH1/CH2 acquisition with two probes. It does not claim a new live
-two-probe bench run.
+same-trigger CH1/CH2 acquisition with two probes. It includes the initial
+software baseline, a live dual-probe bench run, and the subsequent generic
+mixed pulse/static qualification iteration.
 
 ## Manual evidence used
 
@@ -54,13 +55,14 @@ two-probe bench run.
   invalid time axes, and session-wide channel inconsistency.
 - Paired analysis works with either channel assigned as trigger.
 
-## Unclosed hardware acceptance
+## Initial hardware acceptance boundary
 
-No new USB acquisition was run with two physically connected probes. Hardware
-acceptance therefore remains pending until the user declares the instrument
+At this stage, no new USB acquisition had been run with two physically
+connected probes. Hardware acceptance therefore remained pending until the user declared the instrument
 serial, probe attenuation switches, common-ground wiring, voltage/category
 limits, signal roles, trigger source, profile, and output directory. The
-software must not convert the manual's typical 500 ps specification into a
+later live sections record the supplied declaration and completed captures.
+The software does not convert the manual's typical 500 ps specification into a
 measured correction.
 
 ## Live read-only preflight — 2026-08-15 13:13 +0800
@@ -145,6 +147,87 @@ The captures prove a same-trigger PA3 pulse and stationary Hall-high sample.
 They do not prove Hall transitions or Hall-low behavior. The observed Hall
 0.44–0.48 Vpp and CH1 high-frequency ripple materially exceed the user's prior
 noise record and remain a probe/scope/DUT measurement-chain anomaly. The
-metadata also preserves invalid scope measurement sentinel `9.9e37` as a
-numeric value; this is a confirmed tool defect to fix in the next approved
-increment.
+metadata also preserved invalid scope measurement sentinel `9.9e37` as a
+numeric value; this confirmed tool defect is fixed and revalidated in the
+generic iteration below.
+
+## Generic tool and Skill iteration — 2026-08-15 14:01 +0800
+
+The approved implementation treats the PA3/Hall run only as motivating and
+live acceptance evidence. No PA3, Hall, Dooroute pin, or bench-specific voltage
+window was added to plugin defaults or bundled assets.
+
+Implemented generic behavior:
+
+- `rigol preflight --channels ...` performs identity, channel, trigger,
+  timebase, acquisition, and measurement queries without configuration writes;
+- DS1000E comparison-prefixed, non-finite, and magnitude-at-least-`1e30`
+  measurements normalize to JSON null;
+- host metadata does not infer frequency from a waveform without a trustworthy
+  reference frequency;
+- per-channel qualification supports backward-compatible `pulse` mode and
+  explicit `static` mode;
+- static mode accepts a median inside any ordered, non-overlapping user-defined
+  voltage window, applies an optional full-span Vpp gate, records the matched
+  window, and always states `transitions_verified: false`;
+- mixed sessions remain all-selected-channels fail-closed.
+
+Executed software and package evidence:
+
+| Check | Result |
+|---|---|
+| Baseline before implementation | PASS; 47 tests |
+| Full suite after implementation | PASS; 68 tests |
+| Canonical Skill validation | PASS; all five Skills |
+| Canonical plugin validation | PASS |
+| Frozen-runtime package | PASS; 16 non-development packages installed |
+| Packaged plugin validation | PASS |
+| Packaged CLI | PASS; `preflight` present in top-level and command help |
+| Personal installation | PASS; `rigol-ds1102e@personal` installed and enabled at `0.1.0+codex.20260815060129` |
+| Installed live preflight | PASS; exact DS1102E identity, both 1X channels, CH2 invalid frequency normalized to null |
+
+### Live mixed pulse/static session
+
+The workspace-only profile was
+`captures/bench-two-probe-pa3-hall-20260815/mixed-session-config.toml`.
+It declared CH1 as a 10 Hz pulse and CH2 as a static channel with either low or
+high voltage windows and a 0.10 V maximum Vpp. These values were not bundled
+into the generic plugin.
+
+The bounded 12-second session was
+`captures/bench-two-probe-pa3-hall-20260815/mixed-session-live` and produced:
+
+- seven same-trigger rejected captures, each independently passing schema-v2
+  artifact verification;
+- CH1 accepted in every frame with nine complete pulses, frequency range
+  9.999838307–10.000051383 Hz, Vpp range 1.136–1.168 V, and period CV below
+  0.012 percent;
+- CH2 median 2.800 V, matched high window index 1 in every frame, and
+  `transitions_verified: false`;
+- CH2 Vpp range 0.44–0.56 V, causing exact `vpp_above_maximum` rejection in
+  every frame;
+- zero promoted captures, seven rejected captures, no reconnects, a bounded
+  `session_deadline`, and `restored: true`;
+- a valid run-level verification report with no event errors.
+
+Representative rejected capture:
+
+- path:
+  `captures/bench-two-probe-pa3-hall-20260815/mixed-session-live/rejected/20260815T060019.861422Z_000001`;
+- NPZ SHA-256:
+  `6c38fa0d0b189c4c47fe98d0b033674f4cf571fd207665f37bb23eaf0fc1d18a`;
+- invalid CH1 scope frequency/Vpp are null;
+- CH2 host frequency is null rather than a noise-derived value;
+- saved qualification contains pulse/static modes, matched window, exact
+  rejection reason, and transition boundary.
+
+Installed-plugin preflight after the session independently confirmed the
+restored original state: NORMAL memory/acquisition, 200 ms/div, -20 us offset,
+CH1 trigger at 60 mV, both channels 1X and 1 V/div, CH2 offset 40 mV, and a
+non-STOP trigger state.
+
+The rejected session is the intended acceptance result for the declared noise
+gate. Thresholds were not weakened to manufacture successful promotion. This
+proves that the generic mixed-mode tool expresses and enforces the requested
+policy; it does not prove that the physical Hall measurement chain meets its
+prior noise expectation.

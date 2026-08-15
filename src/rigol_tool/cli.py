@@ -12,7 +12,7 @@ from .artifacts import export_csv, write_capture, write_event
 from .analysis import analyze_capture, analyze_series
 from .config import load_config
 from .errors import ConfigurationError, DeviceIdentityError, RigolError, TriggerTimeoutError, WaveformDataError
-from .instrument import CaptureSession, VisaConnection, capture_once, identify
+from .instrument import CaptureSession, VisaConnection, capture_once, identify, preflight
 from .paired_analysis import analyze_paired_series
 from .session import ContactGate, MultiChannelQualificationResult, QualificationResult, assess_channels
 from .verify import verify_artifacts
@@ -61,6 +61,12 @@ def parser() -> argparse.ArgumentParser:
     common.add_argument("--io-timeout", type=_positive, default=30.0, help="USB I/O timeout in seconds (default: 30)")
     commands = root.add_subparsers(dest="command", required=True)
     commands.add_parser("doctor", parents=[common], help="identify the connected instrument")
+    preflight_parser = commands.add_parser(
+        "preflight",
+        parents=[common],
+        help="read current identity and settings without configuration writes",
+    )
+    preflight_parser.add_argument("--channels", type=_channels, default=(1,))
     capture = commands.add_parser("capture", parents=[common], help="capture one fresh triggered waveform")
     capture.add_argument("--output", type=Path, required=True)
     capture.add_argument("--config", type=Path)
@@ -141,6 +147,13 @@ def _doctor(args: argparse.Namespace) -> int:
     with _connect(args, None) as (inst, resource):
         idn = identify(inst, args.serial)
         print(json.dumps({"resource": resource, "idn": idn}, indent=2))
+    return 0
+
+
+def _preflight(args: argparse.Namespace) -> int:
+    with _connect(args, None) as (inst, resource):
+        idn = identify(inst, args.serial)
+        print(json.dumps(preflight(inst, resource, idn, args.channels), indent=2))
     return 0
 
 
@@ -433,6 +446,8 @@ def main(argv: list[str] | None = None) -> int:
     try:
         if args.command == "doctor":
             return _doctor(args)
+        if args.command == "preflight":
+            return _preflight(args)
         if args.command == "capture":
             return _capture(args)
         if args.command == "watch":

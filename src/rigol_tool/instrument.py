@@ -122,6 +122,19 @@ def query(inst: MessageInstrument, command: str) -> str:
     return inst.query(command).strip()
 
 
+def parse_optional_measurement(response: str) -> float | None:
+    normalized = response.strip()
+    if normalized.startswith((">", "<")):
+        return None
+    try:
+        value = float(normalized)
+    except ValueError:
+        return None
+    if not np.isfinite(value) or abs(value) >= 1e30:
+        return None
+    return value
+
+
 def identify(inst: MessageInstrument, expected_serial: str | None = None) -> str:
     idn = query(inst, "*IDN?")
     fields = [field.strip() for field in idn.split(",")]
@@ -130,6 +143,61 @@ def identify(inst: MessageInstrument, expected_serial: str | None = None) -> str
     if expected_serial and fields[2] != expected_serial:
         raise DeviceIdentityError(f"expected serial {expected_serial}, received {fields[2]}")
     return idn
+
+
+def preflight(
+    inst: MessageInstrument,
+    resource: str,
+    idn: str,
+    channels: tuple[int, ...],
+) -> dict[str, Any]:
+    if (
+        not channels
+        or any(channel not in (1, 2) for channel in channels)
+        or len(set(channels)) != len(channels)
+    ):
+        raise AcquisitionError("channels must contain unique channel numbers 1 and/or 2")
+    mode = query(inst, ":TRIG:MODE?").upper()
+    trigger: dict[str, Any] = {"mode": mode}
+    if mode == "EDGE":
+        trigger.update({
+            "source": query(inst, ":TRIG:EDGE:SOUR?"),
+            "slope": query(inst, ":TRIG:EDGE:SLOP?"),
+            "level_v": float(query(inst, ":TRIG:EDGE:LEV?")),
+            "coupling": query(inst, ":TRIG:EDGE:COUP?"),
+        })
+    return {
+        "resource": resource,
+        "idn": idn,
+        "trigger_status": query(inst, ":TRIG:STAT?"),
+        "acquisition": {
+            "memory_depth": query(inst, ":ACQ:MEMD?"),
+            "type": query(inst, ":ACQ:TYPE?"),
+        },
+        "timebase": {
+            "scale_s_div": float(query(inst, ":TIM:SCAL?")),
+            "offset_s": float(query(inst, ":TIM:OFFS?")),
+        },
+        "trigger": trigger,
+        "channels": {
+            str(channel): {
+                "display": _equivalent("ON", query(inst, f":CHAN{channel}:DISP?")),
+                "probe": float(query(inst, f":CHAN{channel}:PROB?")),
+                "coupling": query(inst, f":CHAN{channel}:COUP?"),
+                "scale_v_div": float(query(inst, f":CHAN{channel}:SCAL?")),
+                "offset_v": float(query(inst, f":CHAN{channel}:OFFS?")),
+                "measurements": {
+                    "frequency_hz": parse_optional_measurement(
+                        query(inst, f":MEAS:FREQ? CHAN{channel}")
+                    ),
+                    "vpp_v": parse_optional_measurement(
+                        query(inst, f":MEAS:VPP? CHAN{channel}")
+                    ),
+                },
+            }
+            for channel in channels
+        },
+    }
 
 
 def _bool(value: bool) -> str:
@@ -530,16 +598,14 @@ class CaptureSession:
             f":CHAN{channel}:DISP?": query(self.inst, f":CHAN{channel}:DISP?")
             for channel in self.channels
         })
-        def optional_measurement(command: str) -> float | None:
-            response = query(self.inst, command).strip()
-            if response.startswith((">", "<")):
-                return None
-            return float(response)
-
         measurements = {
             channel: {
-                "frequency_hz": optional_measurement(f":MEAS:FREQ? CHAN{channel}"),
-                "vpp_v": optional_measurement(f":MEAS:VPP? CHAN{channel}"),
+                "frequency_hz": parse_optional_measurement(
+                    query(self.inst, f":MEAS:FREQ? CHAN{channel}")
+                ),
+                "vpp_v": parse_optional_measurement(
+                    query(self.inst, f":MEAS:VPP? CHAN{channel}")
+                ),
             }
             for channel in self.channels
         }

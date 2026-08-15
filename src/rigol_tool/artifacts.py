@@ -34,19 +34,23 @@ def waveform_statistics(
     midpoint = (minimum + maximum) / 2.0
     crossings = np.flatnonzero((voltage_v[:-1] < midpoint) & (voltage_v[1:] >= midpoint)) + 1
     frequency: float | None = None
-    if (
-        crossings.size
-        and reference_frequency_hz is not None
+    valid_reference = (
+        reference_frequency_hz is not None
         and np.isfinite(reference_frequency_hz)
         and 0 < reference_frequency_hz < 1e30
+    )
+    if (
+        crossings.size
+        and valid_reference
     ):
+        assert reference_frequency_hz is not None
         minimum_separation_s = 0.5 / reference_frequency_hz
         accepted = [int(crossings[0])]
         for crossing in crossings[1:]:
             if time_s[crossing] - time_s[accepted[-1]] >= minimum_separation_s:
                 accepted.append(int(crossing))
         crossings = np.asarray(accepted, dtype=np.int64)
-    if crossings.size >= 2:
+    if valid_reference and crossings.size >= 2:
         periods = np.diff(time_s[crossings])
         positive = periods[periods > 0]
         if positive.size:

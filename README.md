@@ -5,6 +5,7 @@ USB automation and auditable one- or two-probe waveform capture for the RIGOL DS
 ```bash
 uv sync
 uv run rigol doctor
+uv run rigol preflight --serial DS1ET183009083 --channels 1,2
 uv run rigol capture --output captures --trigger-timeout 10
 uv run rigol watch --output captures --interval 60 --trigger-timeout 10 --count 10
 uv run rigol session --config configs/probe-comp-1khz.toml --output captures/session --channels 1
@@ -138,6 +139,41 @@ max_vpp_v = 4.0
 channel fails qualification. This prevents valid CH1 contact from promoting an
 absent or weak CH2 trace.
 
+### Mixed pulse and static channels
+
+[KNOWN] Qualification is configured independently per channel. `mode =
+"pulse"` is the backward-compatible default. `mode = "static"` accepts a
+stationary channel only when its median lies inside one declared voltage window
+and its full-span Vpp does not exceed the optional noise gate:
+
+```toml
+[qualification.channel1]
+mode = "pulse"
+nominal_frequency_hz = 10
+min_vpp_v = 0.6
+max_vpp_v = 1.2
+
+[qualification.channel2]
+mode = "static"
+allowed_level_windows_v = [[-0.05, 0.08], [2.60, 3.10]]
+max_vpp_v = 0.10
+```
+
+[KNOWN] The windows are user-declared workspace configuration, not DUT-specific
+plugin defaults. They must be finite, ordered, non-overlapping `[low, high]`
+pairs. Static qualification reports the matched window and always records
+`transitions_verified: false`; one stationary capture cannot prove switching.
+
+[KNOWN] `rigol preflight --channels 1,2` is query-only. It reports identity,
+current channel attenuation/coupling/scale/offset, trigger, timebase,
+acquisition state, and normalized scope measurements. It cannot prove physical
+probe switches, common-ground wiring, or voltage/category safety.
+
+[KNOWN] DS1000E invalid measurements such as `99e36`, comparison-prefixed
+values, and non-finite numbers are represented as JSON `null`. Host metadata
+does not infer frequency from an unreferenced static/noise waveform; run pulse
+analysis with an explicit nominal frequency instead.
+
 ## Codex plugin
 
 [KNOWN] `rigol-tool` 同时提供普通 Python CLI 和 Codex plugin。Python CLI 负责
@@ -171,11 +207,11 @@ only copy of a change there.
 
 | Skill | Use | USB access | Output |
 |---|---|---:|---|
-| `rigol-acquire` | [KNOWN] Identify the instrument, wait for one or two selected probes, require consecutive all-channel qualification, and retain auditable frames. | Yes | Capture directory, `events.jsonl`, `verification.json` |
+| `rigol-acquire` | [KNOWN] Run read-only preflight, wait for one or two selected probes, require consecutive mixed-mode all-channel qualification, and retain auditable frames. | Yes | Capture directory, `events.jsonl`, `verification.json` |
 | `rigol-analyze` | [KNOWN] Verify artifacts and calculate per-channel pulse metrics or cross-channel paired timing. | No | `series-analysis.json` or `paired-series-analysis.json` |
 | `rigol-interpret` | [KNOWN] Convert verified one- or two-channel analysis into evidence-bounded conclusions. | No | `interpretation.md` and a chat summary |
 | `rigol-run-workflow` | [KNOWN] Run the CH1 default workflow without skipping failed gates. | Yes, during acquisition | Complete acquisition and report directory |
-| `rigol-use-two-probes` | [KNOWN] Enforce grounding/attenuation confirmation, qualify CH1 and CH2, verify, analyze, and interpret the same-trigger dual capture. | Yes, during acquisition | Complete two-channel acquisition and report directory |
+| `rigol-use-two-probes` | [KNOWN] Run preflight, enforce grounding/attenuation confirmation, qualify pulse or static CH1/CH2 modes, verify, analyze, and interpret the same-trigger dual capture. | Yes, during acquisition | Complete two-channel acquisition and report directory |
 
 [KNOWN] The first three qualifying frames are provisional until the third
 passes; once contact is established, those three frames are promoted and count
@@ -289,8 +325,9 @@ claiming absolute phase or calibrated frequency accuracy.
 
 [KNOWN] Before USB configuration writes, the acquisition Skill declares the
 instrument serial, selected channels, trigger source, profile, output directory,
-and command. The two-probe Skill additionally gates attenuation, common ground,
-and voltage/category ratings. Codex may request sandbox approval for USB access.
+and command, then may run the query-only preflight. The two-probe Skill gates
+physical attenuation, common ground, and voltage/category ratings before any
+configuration write. Codex may request sandbox approval for USB access.
 
 [KNOWN] To cancel a waiting acquisition, tell Codex to cancel or send SIGINT in
 a manual terminal. The workflow waits for `session_cancelled` and

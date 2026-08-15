@@ -14,6 +14,8 @@ from rigol_tool.instrument import (
     capture_once,
     identify,
     is_ds1102e_resource,
+    parse_optional_measurement,
+    preflight,
 )
 
 
@@ -39,6 +41,8 @@ class FakeInstrument:
             "*IDN?": "Rigol Technologies,DS1102E,DS1ET183009083,00.04.04.00.00",
             ":TRIG:MODE?": "EDGE", ":WAV:POIN:MODE?": "NORMAL", ":TRIG:EDGE:SWE?": "AUTO",
             ":TRIG:EDGE:SOUR?": "CH1", ":ACQ:MEMD?": "NORMAL", ":ACQ:TYPE?": "NORMAL",
+            ":TRIG:EDGE:SLOP?": "POSITIVE", ":TRIG:EDGE:LEV?": "0.06",
+            ":TRIG:EDGE:COUP?": "DC",
             ":ACQ:SAMP?": "1000", ":TIM:SCAL?": "0.001", ":TIM:OFFS?": "0",
             ":CHAN1:MEMD?": "600", ":CHAN1:SCAL?": "1", ":CHAN1:OFFS?": "0", ":CHAN1:PROB?": "10",
             ":CHAN1:DISP?": "ON",
@@ -82,6 +86,48 @@ class FakeInstrument:
 def test_identity() -> None:
     inst = FakeInstrument()
     assert "DS1102E" in identify(inst, "DS1ET183009083")
+
+
+@pytest.mark.parametrize(
+    ("response", "expected"),
+    [
+        ("2.80", 2.8),
+        (">2.50e+04", None),
+        ("99e36", None),
+        ("9.9e37", None),
+        ("nan", None),
+        ("inf", None),
+        ("not-a-number", None),
+    ],
+)
+def test_optional_measurement_normalization(response, expected) -> None:
+    assert parse_optional_measurement(response) == expected
+
+
+def test_preflight_queries_selected_channels_without_writes() -> None:
+    class QueryOnlyInstrument(FakeInstrument):
+        def write(self, command):
+            raise AssertionError(f"preflight attempted write: {command}")
+
+    inst = QueryOnlyInstrument()
+    inst.values[":MEAS:FREQ? CHAN1"] = "10"
+    inst.values[":MEAS:VPP? CHAN1"] = "0.9"
+    inst.values[":MEAS:FREQ? CHAN2"] = "99e36"
+    inst.values[":MEAS:VPP? CHAN2"] = "0.04"
+
+    result = preflight(inst, "USB::INSTR", identify(inst), (1, 2))
+
+    assert result["trigger_status"] == "STOP"
+    assert result["trigger"]["source"] == "CH1"
+    assert result["channels"]["1"]["probe"] == 10.0
+    assert result["channels"]["1"]["measurements"] == {
+        "frequency_hz": 10.0,
+        "vpp_v": 0.9,
+    }
+    assert result["channels"]["2"]["measurements"] == {
+        "frequency_hz": None,
+        "vpp_v": 0.04,
+    }
 
 
 def test_scpi_channel_aliases_are_equivalent() -> None:

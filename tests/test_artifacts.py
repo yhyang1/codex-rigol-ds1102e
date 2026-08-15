@@ -1,6 +1,7 @@
 import json
 
 import numpy as np
+import pytest
 
 from rigol_tool.artifacts import waveform_statistics, write_capture
 from rigol_tool.instrument import Capture, ChannelWaveform
@@ -16,6 +17,16 @@ def test_frequency_rejects_repeated_crossings_around_each_pulse() -> None:
         voltage_v[start + 2] = 10
     result = waveform_statistics(time_s, voltage_v, reference_frequency_hz=10.0)
     assert result["frequency_hz"] == 10.0
+
+
+def test_frequency_is_not_inferred_without_reference() -> None:
+    time_s = np.arange(1000, dtype=np.float64) / 1_000_000
+    static_noise = 2.8 + 0.02 * np.sin(2 * np.pi * 100_000 * time_s)
+
+    result = waveform_statistics(time_s, static_noise)
+
+    assert result["frequency_hz"] is None
+    assert result["mean_v"] == pytest.approx(2.8)
 
 
 def test_write_and_verify_schema_v2_dual_capture(tmp_path) -> None:

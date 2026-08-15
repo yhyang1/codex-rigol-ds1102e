@@ -1,6 +1,6 @@
 ---
 name: rigol-interpret
-description: Interpret verified one- or two-channel RIGOL DS1102E acquisition and analysis artifacts and write an evidence-bounded Markdown report. Use for waveform meaning, glitches, precision, cross-channel timing, or interpretation.md.
+description: Interpret verified one- or two-channel RIGOL DS1102E pulse, static-level, and paired acquisition artifacts and write an evidence-bounded Markdown report. Use for waveform meaning, glitches, static states, precision, cross-channel timing, or interpretation.md.
 ---
 
 # Rigol Interpret
@@ -35,3 +35,5 @@ Use exactly these report sections:
 - Keep the specified typical 500 ps inter-channel delay separate from measured sample-derived delay; do not automatically subtract it.
 - If artifacts fail verification, do not interpret them as valid measurements.
 - Treat user-declared physical setup separately from artifact-proven identity and settings. Label representative artifact links as representative.
+- For static qualification, name the matched declared window and noise result, state `transitions_verified: false`, and never turn one high/low snapshot into proof that the input switches correctly.
+- Treat null instrument measurements as unavailable. Do not restate invalid-sentinel normalization as a measured zero.

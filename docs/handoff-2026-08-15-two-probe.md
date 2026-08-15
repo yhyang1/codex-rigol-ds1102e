@@ -24,12 +24,21 @@ auditably support a USB-connected oscilloscope with two probes.
   PA3 pulse while CH2 remained at the Hall-high state near 2.81 V.
 - Independently verified restoration of the original channel, trigger,
   timebase, memory, acquisition, and running state after the live captures.
+- Added generic query-only `preflight`, DS1000E invalid-sentinel normalization,
+  no-reference frequency suppression, and per-channel pulse/static
+  qualification with explicit transition boundaries.
+- Ran a live mixed pulse/static session. CH1 passed all seven frames; CH2
+  matched the declared high window but correctly failed the 0.10 Vpp noise gate
+  in all seven frames. The bounded session restored state and verified valid.
+- Built, validated, installed, and live-tested plugin version
+  `0.1.0+codex.20260815060129`.
 
 ## Evidence
 
-See `docs/validation-2026-08-15-two-probe.md`. The full 47-test suite, five
+See `docs/validation-2026-08-15-two-probe.md`. The final 68-test suite, five
 Skill validators, canonical and packaged plugin validators, locked-runtime
-package, installed command entrypoint, and installed pre-USB failure gate pass.
+package, installed command entrypoint, installed read-only preflight, and live
+mixed-mode fail-closed session pass their stated acceptance boundaries.
 
 ## Files/State Changed
 
@@ -40,19 +49,21 @@ package, installed command entrypoint, and installed pre-USB failure gate pass.
 - Design, implementation plan, validation, and handoff: `docs/`
 - Generated package: `build/codex-plugin/rigol-ds1102e/`
 - Personal installation: `rigol-ds1102e@personal`, enabled at version
-  `0.1.0+codex.20260815050521`
+  `0.1.0+codex.20260815060129`
 
 ## Remaining Acceptance Items
 
-- Normalize the DS1102E invalid measurement sentinel `99e36`/`9.9e37` to null.
-- Decide and implement the mixed qualification policy for pulse CH1 plus a
-  stationary Hall channel that may validly be either high or low.
-- Decide whether to add a formal read-only `preflight` CLI command.
-- Re-run tests, validators, packaging, installation, and live narrow checks for
-  the approved tool/Skill increment.
+- Investigate the physical/probe/scope/DUT source of the observed CH2
+  0.44–0.56 Vpp if the application requires the prior approximately 0.034 Vpp
+  expectation.
+- Observe a separate authorized Hall-low snapshot if evidence for the low
+  window is required.
+- Move the wheel through both Hall states only under separate physical-motion
+  authorization if transition behavior must be proven.
 
-The first four live-capture acceptance items are now closed. The items above
-are the evidence-driven software/Skill increment that remains.
+The generic tool/Skill implementation and requested live validation are closed.
+The items above are intentionally unproven external measurement or motion
+boundaries, not missing plugin behavior.
 
 ## Blockers/Risks
 
@@ -75,14 +86,15 @@ are the evidence-driven software/Skill increment that remains.
 
 ## Next Concrete Action
 
-Complete brainstorming approval for the next tool increment. The recommended
-scope is invalid-sentinel normalization, a formal read-only `rigol preflight`,
-and mixed per-channel qualification so PA3 pulse validity can coexist with a
-stationary Hall channel accepted in either declared low or high range.
+Start a new Codex task so the refreshed Skill catalog loads. Use `preflight`
+before configuration writes and a workspace profile with explicit per-channel
+signal modes. If continuing this bench diagnosis, isolate the CH2 measurement
+chain without weakening the 0.10 Vpp gate or claiming Hall transitions.
 
 ## THE Reflection
 
-The evidence-first method exposed the correct acceptance boundary: software
-and installation are closed, while physical two-probe safety and live bench
-capture remain explicit hardware evidence. No change to the THE Skill itself
-is justified by this iteration.
+The evidence-first method forced the implementation to preserve a correct
+rejection instead of tuning thresholds until the session passed. The generic
+signal-class boundary was derived from a concrete bench counterexample without
+embedding that DUT into the plugin. No change to the THE Skill itself is
+justified by this iteration.

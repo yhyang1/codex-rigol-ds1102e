@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+import math
 from pathlib import Path
 import tomllib
 from typing import Any
@@ -46,12 +47,14 @@ class TriggerConfig:
 
 @dataclass(frozen=True)
 class QualificationConfig:
+    mode: str = "PULSE"
     nominal_frequency_hz: float | None = None
     frequency_tolerance_percent: float = 5.0
     min_vpp_v: float | None = None
     max_vpp_v: float | None = None
     min_complete_pulses: int = 3
     max_period_cv_percent: float = 5.0
+    allowed_level_windows_v: tuple[tuple[float, float], ...] = ()
 
 
 @dataclass(frozen=True)
@@ -84,8 +87,8 @@ def _choice(name: str, value: str | None, choices: set[str]) -> str | None:
 
 
 def _positive(name: str, value: float | None) -> float | None:
-    if value is not None and value <= 0:
-        raise ConfigurationError(f"{name} must be positive")
+    if value is not None and (not math.isfinite(float(value)) or value <= 0):
+        raise ConfigurationError(f"{name} must be finite and positive")
     return value
 
 
@@ -106,12 +109,14 @@ def _channel(section: str, raw: dict[str, Any]) -> ChannelConfig:
 
 
 _QUALIFICATION_KEYS = {
+    "mode",
     "nominal_frequency_hz",
     "frequency_tolerance_percent",
     "min_vpp_v",
     "max_vpp_v",
     "min_complete_pulses",
     "max_period_cv_percent",
+    "allowed_level_windows_v",
 }
 
 
@@ -122,18 +127,62 @@ def _qualification(
 ) -> QualificationConfig:
     _only_keys(section, raw, _QUALIFICATION_KEYS)
     defaults = base or QualificationConfig()
+    mode = _choice(
+        f"{section}.mode",
+        raw.get("mode", defaults.mode),
+        {"PULSE", "STATIC"},
+    )
+    assert mode is not None
+    raw_windows = raw.get("allowed_level_windows_v", defaults.allowed_level_windows_v)
+    if not isinstance(raw_windows, (list, tuple)):
+        raise ConfigurationError(f"{section}.allowed_level_windows_v must be an array of [low, high] pairs")
+    windows: list[tuple[float, float]] = []
+    for index, window in enumerate(raw_windows):
+        if not isinstance(window, (list, tuple)) or len(window) != 2:
+            raise ConfigurationError(
+                f"{section}.allowed_level_windows_v[{index}] must contain exactly [low, high]"
+            )
+        try:
+            lower, upper = (float(window[0]), float(window[1]))
+        except (TypeError, ValueError) as exc:
+            raise ConfigurationError(
+                f"{section}.allowed_level_windows_v[{index}] must contain numeric bounds"
+            ) from exc
+        if not math.isfinite(lower) or not math.isfinite(upper):
+            raise ConfigurationError(
+                f"{section}.allowed_level_windows_v[{index}] bounds must be finite"
+            )
+        if lower >= upper:
+            raise ConfigurationError(
+                f"{section}.allowed_level_windows_v[{index}] lower bound must be less than upper bound"
+            )
+        if windows and lower <= windows[-1][1]:
+            raise ConfigurationError(
+                f"{section}.allowed_level_windows_v must be ordered and non-overlapping"
+            )
+        windows.append((lower, upper))
+    if mode == "STATIC" and not windows:
+        raise ConfigurationError(f"{section}.allowed_level_windows_v is required for static mode")
+    if mode == "PULSE" and windows:
+        raise ConfigurationError(f"{section}.allowed_level_windows_v is only valid for static mode")
     min_vpp = raw.get("min_vpp_v", defaults.min_vpp_v)
     max_vpp = raw.get("max_vpp_v", defaults.max_vpp_v)
-    if min_vpp is not None and float(min_vpp) < 0:
-        raise ConfigurationError(f"{section}.min_vpp_v must be non-negative")
-    if max_vpp is not None and float(max_vpp) <= 0:
-        raise ConfigurationError(f"{section}.max_vpp_v must be positive")
-    if min_vpp is not None and max_vpp is not None and float(min_vpp) >= float(max_vpp):
+    if min_vpp is not None and (not math.isfinite(float(min_vpp)) or float(min_vpp) < 0):
+        raise ConfigurationError(f"{section}.min_vpp_v must be finite and non-negative")
+    if max_vpp is not None and (not math.isfinite(float(max_vpp)) or float(max_vpp) <= 0):
+        raise ConfigurationError(f"{section}.max_vpp_v must be finite and positive")
+    if (
+        mode == "PULSE"
+        and min_vpp is not None
+        and max_vpp is not None
+        and float(min_vpp) >= float(max_vpp)
+    ):
         raise ConfigurationError(f"{section}.min_vpp_v must be less than max_vpp_v")
     min_pulses = int(raw.get("min_complete_pulses", defaults.min_complete_pulses))
     if min_pulses < 2:
         raise ConfigurationError(f"{section}.min_complete_pulses must be at least 2")
     return QualificationConfig(
+        mode=mode,
         nominal_frequency_hz=_positive(
             f"{section}.nominal_frequency_hz",
             raw.get("nominal_frequency_hz", defaults.nominal_frequency_hz),
@@ -149,6 +198,7 @@ def _qualification(
             f"{section}.max_period_cv_percent",
             raw.get("max_period_cv_percent", defaults.max_period_cv_percent),
         ),
+        allowed_level_windows_v=tuple(windows),
     )
 
 

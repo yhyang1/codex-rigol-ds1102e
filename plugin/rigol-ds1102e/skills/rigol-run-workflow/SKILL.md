@@ -11,7 +11,7 @@ If the user asks for two probes, CH1/CH2, channel-to-channel delay, or paired ti
 
 ## Gate 1: identify and declare
 
-Resolve the plugin root as two directories above this `SKILL.md`. Declare the serial, CH1-only profile, nominal frequency, qualification bounds, output directory, three-frame contact requirement, ten-frame target, and indefinite-wait behavior. Run the plugin's absolute `scripts/rigol-cli doctor` path and confirm identity.
+Resolve the plugin root as two directories above this `SKILL.md`. Declare the serial, CH1-only profile, nominal frequency, qualification bounds, output directory, three-frame contact requirement, ten-frame target, and indefinite-wait behavior. Run the plugin's absolute `scripts/rigol-cli preflight --channels 1` path and confirm identity and intended attenuation without treating USB readback as proof of the physical setup.
 
 ## Gate 2: wait and acquire
 

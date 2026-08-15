@@ -1,6 +1,6 @@
 ---
 name: rigol-acquire
-description: Acquire fresh one- or two-channel waveforms from a USB-connected RIGOL DS1102E, including delayed or intermittent probe contact and same-trigger CH1/CH2 capture. Use for connection checks, one-shot captures, stable-contact qualification, or auditable acquisition sessions.
+description: Preflight and acquire fresh one- or two-channel waveforms from a USB-connected RIGOL DS1102E, including delayed contact, mixed pulse/static qualification, and same-trigger CH1/CH2 capture. Use for connection checks, one-shot captures, stable-contact qualification, or auditable acquisition sessions.
 ---
 
 # Rigol Acquire
@@ -11,6 +11,7 @@ Use the plugin runtime, not a globally installed `rigol`. Resolve the plugin roo
 
 - [KNOWN] Default to CH1 only. Select `--channels 1,2` only when the user asks to use two probes.
 - [KNOWN] Before USB writes, state the serial, selected channels, trigger source, profile, output directory, and command.
+- [KNOWN] Run `preflight --channels ...` after declaring the intended instrument and channels. It is query-only; compare its attenuation readbacks with the physical declaration and intended profile without treating USB state as proof of wiring.
 - [KNOWN] For two probes, require confirmation that each physical probe switch matches its channel's configured attenuation, both ground clips connect only to the same circuit ground potential, and the probe/scope ratings cover the signal. Stop if any answer is unknown.
 - [KNOWN] Put capture output in the user's workspace or an explicitly requested directory, never inside the installed plugin.
 - [KNOWN] Use a new empty output directory. If it already contains `events.jsonl`, capture directories, or reports, select a timestamped sibling; do not merge sessions.
@@ -23,11 +24,11 @@ Use `session` by default whenever contact is not already proven stable, the prob
 
 For one probe on the front-panel compensation output, use `assets/configs/probe-comp-1khz.toml`. For two 10X probes on that same safe reference point, use `assets/configs/probe-comp-two-probe-1khz.toml` only after confirming both physical switches are 10X. The two-probe profile is a configuration template, not a completed bench validation. For another source, copy the applicable TOML into the workspace and explicitly edit serial, both channel settings, trigger, timebase, and per-channel qualification limits.
 
-Two-channel `session` requires both `[qualification.channel1]` and `[qualification.channel2]`. A frame passes only when both selected channels pass; do not weaken this to first-channel qualification.
+Two-channel `session` requires both `[qualification.channel1]` and `[qualification.channel2]`. A frame passes only when both selected channels pass; do not weaken this to first-channel qualification. `mode = "pulse"` is the default. Use `mode = "static"` plus explicit ordered, non-overlapping `allowed_level_windows_v` for a stationary level that may validly occupy one of several states. Use `max_vpp_v` as a fail-closed noise gate; never widen it merely to promote a frame. Static qualification proves only the current level window and reports `transitions_verified: false`.
 
 ## Wait-aware session
 
-1. Run `doctor` first and require the returned identity to be a RIGOL DS1102E matching the requested serial.
+1. Run `preflight` first and require the returned identity to be a RIGOL DS1102E matching the requested serial. Treat normalized `null` measurements as unavailable, not zero.
 2. Start the session in a persistent PTY/process session. Defaults are CH1, indefinite wait (`--wait-timeout 0`), three consecutive qualified frames, and ten accepted frames. For two probes pass `--channels 1,2` and the edited two-channel profile.
 3. Poll the process at intervals of at most 30 seconds. Send the user a concise status update at least every 60 seconds while it is still waiting. Do not end the turn merely because the contact is absent.
 4. Treat `waiting_contact` as normal. `contact_candidate` is provisional; do not claim contact until `contact_qualified` appears.
@@ -38,7 +39,7 @@ Two-channel `session` requires both `[qualification.channel1]` and `[qualificati
 Example:
 
 ```bash
-"$PLUGIN_ROOT/scripts/rigol-cli" doctor
+"$PLUGIN_ROOT/scripts/rigol-cli" preflight --channels 1
 "$PLUGIN_ROOT/scripts/rigol-cli" session \
   --config "$PLUGIN_ROOT/assets/configs/probe-comp-1khz.toml" \
   --output "$OUTPUT_DIR" --channels 1 \
@@ -57,4 +58,4 @@ For two probes, replace the profile and channel argument with:
   --wait-timeout 0 --qualify-consecutive 3 --accepted-count 10
 ```
 
-Report the artifact path, selected channels, per-channel qualification, contact epochs, accepted/rejected/waiting counts, restore status, and verification result. Describe dual data as "simultaneously sampled, sequentially downloaded." Tag measured values `[COMPUTED]` and instrument identity or saved metadata `[KNOWN]`; include a confidence label.
+Report the artifact path, selected channels, each channel's qualification mode and matched static window when applicable, contact epochs, accepted/rejected/waiting counts, restore status, and verification result. State `transitions_verified: false` for static frames. Describe dual data as "simultaneously sampled, sequentially downloaded." Tag measured values `[COMPUTED]` and instrument identity or saved metadata `[KNOWN]`; include a confidence label.
