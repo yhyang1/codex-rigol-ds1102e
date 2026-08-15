@@ -62,3 +62,22 @@ serial, probe attenuation switches, common-ground wiring, voltage/category
 limits, signal roles, trigger source, profile, and output directory. The
 software must not convert the manual's typical 500 ps specification into a
 measured correction.
+
+## Live read-only preflight — 2026-08-15 13:13 +0800
+
+No configuration write or waveform capture was attempted. Read-only USB
+evidence from serial `DS1ET183009083` established:
+
+- identity: `Rigol Technologies,DS1102E,DS1ET183009083,00.04.02.01.00`;
+- CH1 and CH2 were both displayed, DC-coupled, and configured as 1X at
+  1 V/div;
+- current acquisition mode was NORMAL and trigger mode was CH1 EDGE;
+- `:MEAS:FREQ?` and `:MEAS:VPP?` returned `99e36` for both channels, so no
+  valid signal measurement was available;
+- the checked-in two-probe template requires 10X on both channels and therefore
+  was not safe to apply without physical attenuation confirmation.
+
+The run is blocked before configuration writes. The smallest input needed is a
+physical declaration of each probe's connection and 1X/10X switch position,
+plus confirmation that both ground clips are on the same circuit-ground
+potential and the signal is within the probe/scope ratings.

@@ -15,6 +15,9 @@ auditably support a USB-connected oscilloscope with two probes.
   Skills, plugin UI, README, and bundled profile.
 - Built, validated, installed, and enabled plugin version
   `0.1.0+codex.20260815050521`.
+- Performed a live read-only USB preflight against serial `DS1ET183009083`.
+  Identity passed, but both channels were configured as 1X and both frequency
+  and Vpp measurements returned `99e36`; no configuration writes followed.
 
 ## Evidence
 
@@ -52,12 +55,22 @@ These are hardware acceptance items, not missing software implementation.
   path; NORMAL is the default.
 - Timing remains relative to the oscilloscope timebase unless calibration
   evidence is supplied.
+- The physical probe switches, ground-clip locations, and signal points remain
+  undeclared. The 10X template contradicts the current 1X channel readbacks,
+  and neither channel currently exposes a measurable signal. Actual acquisition
+  must remain blocked before USB writes.
 
 ## Next Concrete Action
 
-Start a new Codex task so the refreshed Skill catalog loads, invoke
-`$rigol-use-two-probes`, and provide the declared safe wiring/attenuation and
-signal-role confirmation before allowing USB writes.
+Declare each probe's physical connection and 1X/10X switch position, confirm
+both ground clips are on the same circuit-ground potential, and confirm the
+expected signal is within probe/scope ratings. Then select or create a matching
+profile and invoke `$rigol-use-two-probes` before allowing USB writes.
+
+A possible tool increment is a formal read-only `rigol preflight` command that
+emits the identity, CH1/CH2 readbacks, trigger/acquisition state, and current
+measurements. This remains a design proposal only; the brainstorming approval
+gate has not been satisfied and no implementation was started.
 
 ## THE Reflection
 
