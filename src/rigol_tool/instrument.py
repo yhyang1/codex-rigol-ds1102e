@@ -16,6 +16,7 @@ from .waveform import ParsedWaveform, parse_legacy_block, time_axis, voltage_axi
 VID = 0x1AB1
 PID = 0x0588
 SUPPORTED_SINGLE_MODES = {"EDGE", "PULSE", "SLOPE", "PATTERN", "DURATION"}
+DUAL_CHANNEL_POINTS = {"NORMAL": 8192, "LONG": 524288}
 
 
 class MessageInstrument(Protocol):
@@ -402,8 +403,20 @@ class CaptureSession:
         channels: tuple[int, ...],
         poll_interval_s: float = 0.002,
     ):
-        if not channels or any(channel not in (1, 2) for channel in channels):
-            raise AcquisitionError("channels must contain 1 and/or 2")
+        if (
+            not channels
+            or any(channel not in (1, 2) for channel in channels)
+            or len(set(channels)) != len(channels)
+        ):
+            raise AcquisitionError("channels must contain unique channel numbers 1 and/or 2")
+        disabled = [
+            channel
+            for channel in channels
+            if config.channels.get(channel) is not None
+            and config.channels[channel].display is False
+        ]
+        if disabled:
+            raise AcquisitionError(f"selected channels cannot be disabled in the profile: {disabled}")
         self.inst = inst
         self.resource = resource
         self.idn = idn
@@ -427,11 +440,22 @@ class CaptureSession:
                 raise AcquisitionError(
                     f"trigger mode {self.mode} has no supported SINGLE sweep; use an EDGE profile"
                 )
+            memory_mode = self.config.acquisition.memory_depth or (
+                "NORMAL" if len(self.channels) == 2 else "LONG"
+            )
             runtime = [
+                *[
+                    SettingChange(
+                        f":CHAN{channel}:DISP?",
+                        f":CHAN{channel}:DISP",
+                        "ON",
+                    )
+                    for channel in self.channels
+                ],
                 SettingChange(
                     ":ACQ:MEMD?",
                     ":ACQ:MEMD",
-                    self.config.acquisition.memory_depth or "LONG",
+                    memory_mode,
                 ),
                 SettingChange(":WAV:POIN:MODE?", ":WAV:POIN:MODE", "RAW"),
                 SettingChange(f":TRIG:{self.mode}:SWE?", f":TRIG:{self.mode}:SWE", "SING"),
@@ -502,6 +526,10 @@ class CaptureSession:
             ":ACQ:MEMD?": query(self.inst, ":ACQ:MEMD?"),
             ":ACQ:TYPE?": query(self.inst, ":ACQ:TYPE?"),
         }
+        settings.update({
+            f":CHAN{channel}:DISP?": query(self.inst, f":CHAN{channel}:DISP?")
+            for channel in self.channels
+        })
         def optional_measurement(command: str) -> float | None:
             response = query(self.inst, command).strip()
             if response.startswith((">", "<")):
@@ -520,6 +548,18 @@ class CaptureSession:
         point_count: int | None = None
         for channel in self.channels:
             memory_depth = int(float(query(self.inst, f":CHAN{channel}:MEMD?")))
+            if len(self.channels) == 2:
+                memory_mode = settings[":ACQ:MEMD?"].upper()
+                expected_depth = DUAL_CHANNEL_POINTS.get(memory_mode)
+                if expected_depth is None:
+                    raise WaveformDataError(
+                        f"unsupported dual-channel memory mode readback: {memory_mode}"
+                    )
+                if memory_depth != expected_depth:
+                    raise WaveformDataError(
+                        f"CHAN{channel} reports {memory_depth} points in dual-channel "
+                        f"{memory_mode} mode; expected {expected_depth}"
+                    )
             scale = float(query(self.inst, f":CHAN{channel}:SCAL?"))
             offset = float(query(self.inst, f":CHAN{channel}:OFFS?"))
             probe = float(query(self.inst, f":CHAN{channel}:PROB?"))

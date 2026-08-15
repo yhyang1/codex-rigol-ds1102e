@@ -1,6 +1,6 @@
 ---
 name: rigol-analyze
-description: Analyze one capture or a series of RIGOL DS1102E CH1 waveform artifacts for frequency, pulse timing, amplitude outliers, missing or extra pulses, and trigger-relative phase. Use after acquisition or when given metadata.json, waveform.npz, or a session directory.
+description: Verify and analyze one- or two-channel RIGOL DS1102E artifacts for per-channel pulse metrics or same-trigger cross-channel delay, width, and missing/extra pulse behavior. Use with metadata.json, waveform.npz, a capture, or a session directory.
 ---
 
 # Rigol Analyze
@@ -10,17 +10,21 @@ Resolve the plugin root as two directories above this `SKILL.md` and use its abs
 ## Procedure
 
 1. Run `verify --output RUN/verification.json` before analysis. Stop on hash, structure, session-terminal, accepted-count, or restore-evidence failure.
-2. Use CH1 unless the user explicitly requests another saved channel.
+2. Use CH1 unless the user explicitly requests CH2 or cross-channel analysis.
 3. Obtain the nominal frequency from the user, acquisition profile, or session metadata. Do not infer it from the measured waveform and then present the same comparison as an independent accuracy test.
 4. For one capture run `analyze CAPTURE --channel 1 --nominal-frequency HZ`.
 5. For a run directory use `analyze-series RUN --channel 1 --nominal-frequency HZ`. This writes `series-analysis.json` atomically alongside the captures.
 6. Inspect boundary truncation flags before reporting glitch counts. Partial pulses at the acquisition window edges are excluded from complete-pulse metrics and are not glitches.
+7. For two-channel causal timing, require both channel arrays in every capture and run `analyze-paired-series` with distinct trigger and dependent channels. Use an expectations JSON for a pass/fail decision; without it, report descriptive metrics only.
 
 ```bash
 "$PLUGIN_ROOT/scripts/rigol-cli" verify "$ARTIFACT" \
   --output "$RUN/verification.json"
 "$PLUGIN_ROOT/scripts/rigol-cli" analyze-series "$RUN" \
   --channel 1 --nominal-frequency 1000
+"$PLUGIN_ROOT/scripts/rigol-cli" analyze-paired-series "$RUN" \
+  --trigger-channel 1 --strobe-channel 2 \
+  --expectations "$EXPECTATIONS_JSON"
 ```
 
 ## Evidence boundaries
@@ -31,5 +35,7 @@ Resolve the plugin root as two directories above this `SKILL.md` and use its abs
 - [KNOWN] A single self-triggered CH1 trace cannot determine connector end-to-end delay or absolute long-term phase.
 - [INFERRED] A stable ten-frame result supports repeatability over that saved interval only; it does not prove long-duration stability.
 - [KNOWN] Frequency accuracy remains relative to the oscilloscope timebase unless external calibration evidence exists.
+- [KNOWN] DS1102E channels sample simultaneously, while USB downloads are sequential; do not treat download timestamps as channel timing.
+- [KNOWN] The manual's typical 500 ps channel delay is a specification, not a measured correction for the saved capture.
 
 Report the exact artifact path and separate `[KNOWN]`, `[COMPUTED]`, and `[INFERRED]` statements with confidence labels.

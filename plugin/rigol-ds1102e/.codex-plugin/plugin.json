@@ -1,22 +1,27 @@
 {
   "name": "rigol-ds1102e",
-  "version": "0.1.0+codex.20260809091252",
-  "description": "Wait-aware USB acquisition, analysis, and evidence-bounded interpretation for the RIGOL DS1102E.",
+  "version": "0.1.0+codex.20260815050521",
+  "description": "Safe one- or two-probe USB acquisition, verification, analysis, and interpretation for the RIGOL DS1102E.",
   "author": {
     "name": "yangmeng",
     "email": "yhyang1@gmail.com"
   },
+  "repository": "https://github.com/yhyang1/codex-rigol-ds1102e",
   "skills": "./skills/",
   "interface": {
     "displayName": "RIGOL DS1102E Bench",
-    "shortDescription": "Wait, acquire, analyze, and interpret CH1 waveforms.",
-    "longDescription": "Controls a USB-connected RIGOL DS1102E, waits through missing or intermittent probe contact, retains qualified captures, verifies artifacts, analyzes pulse waveforms, and produces evidence-bounded reports.",
+    "shortDescription": "Safely acquire and compare one or two probes.",
+    "longDescription": "Controls a USB-connected RIGOL DS1102E, qualifies one or two probe signals, preserves same-trigger CH1/CH2 captures, verifies artifacts, analyzes per-channel or paired pulse timing, restores scope state, and produces evidence-bounded reports.",
     "developerName": "yangmeng",
     "category": "Developer Tools",
     "capabilities": [
       "Interactive",
       "Write"
     ],
-    "defaultPrompt": "Wait for stable probe contact, capture ten qualified CH1 waveforms, analyze them, and explain the evidence."
+    "defaultPrompt": [
+      "Safely capture and analyze both DS1102E probes.",
+      "Wait for stable CH1 contact and analyze ten captures.",
+      "Measure CH1-to-CH2 pulse delay from verified captures."
+    ]
   }
 }

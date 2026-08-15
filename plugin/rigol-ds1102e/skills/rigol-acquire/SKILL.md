@@ -1,6 +1,6 @@
 ---
 name: rigol-acquire
-description: Acquire fresh CH1 waveforms from a USB-connected RIGOL DS1102E, including waiting for delayed, difficult, or intermittent probe contact. Use for scope connection checks, one-shot captures, stable-contact qualification, or collecting an auditable capture session.
+description: Acquire fresh one- or two-channel waveforms from a USB-connected RIGOL DS1102E, including delayed or intermittent probe contact and same-trigger CH1/CH2 capture. Use for connection checks, one-shot captures, stable-contact qualification, or auditable acquisition sessions.
 ---
 
 # Rigol Acquire
@@ -9,8 +9,9 @@ Use the plugin runtime, not a globally installed `rigol`. Resolve the plugin roo
 
 ## Safety and defaults
 
-- [KNOWN] Default to CH1 only. Do not enable or acquire CH2 unless the user explicitly asks.
-- [KNOWN] State the intended instrument serial, profile, output directory, and command before sending USB configuration writes.
+- [KNOWN] Default to CH1 only. Select `--channels 1,2` only when the user asks to use two probes.
+- [KNOWN] Before USB writes, state the serial, selected channels, trigger source, profile, output directory, and command.
+- [KNOWN] For two probes, require confirmation that each physical probe switch matches its channel's configured attenuation, both ground clips connect only to the same circuit ground potential, and the probe/scope ratings cover the signal. Stop if any answer is unknown.
 - [KNOWN] Put capture output in the user's workspace or an explicitly requested directory, never inside the installed plugin.
 - [KNOWN] Use a new empty output directory. If it already contains `events.jsonl`, capture directories, or reports, select a timestamped sibling; do not merge sessions.
 - [KNOWN] A session temporarily changes scope settings and restores and verifies them when it exits normally, reaches a deadline, or receives SIGINT/SIGTERM.
@@ -20,12 +21,14 @@ Use the plugin runtime, not a globally installed `rigol`. Resolve the plugin roo
 
 Use `session` by default whenever contact is not already proven stable, the probe is hard to hold, or the user may connect it later. Use `capture` only for an explicitly requested single fresh frame with known-stable contact.
 
-For the front-panel probe compensation output, use `assets/configs/probe-comp-1khz.toml` from the plugin root. Its `probe = 1` value is the oscilloscope CH1 attenuation-menu setting; verify the saved readback. For another source, copy the TOML into the workspace and explicitly edit the instrument serial, CH1 attenuation/scale, trigger, timebase, nominal frequency, Vpp bounds, complete-pulse minimum, and period-CV limit before acquisition.
+For one probe on the front-panel compensation output, use `assets/configs/probe-comp-1khz.toml`. For two 10X probes on that same safe reference point, use `assets/configs/probe-comp-two-probe-1khz.toml` only after confirming both physical switches are 10X. The two-probe profile is a configuration template, not a completed bench validation. For another source, copy the applicable TOML into the workspace and explicitly edit serial, both channel settings, trigger, timebase, and per-channel qualification limits.
+
+Two-channel `session` requires both `[qualification.channel1]` and `[qualification.channel2]`. A frame passes only when both selected channels pass; do not weaken this to first-channel qualification.
 
 ## Wait-aware session
 
 1. Run `doctor` first and require the returned identity to be a RIGOL DS1102E matching the requested serial.
-2. Start the session in a persistent PTY/process session. Default arguments are CH1, indefinite wait (`--wait-timeout 0`), three consecutive qualified frames, and ten accepted frames.
+2. Start the session in a persistent PTY/process session. Defaults are CH1, indefinite wait (`--wait-timeout 0`), three consecutive qualified frames, and ten accepted frames. For two probes pass `--channels 1,2` and the edited two-channel profile.
 3. Poll the process at intervals of at most 30 seconds. Send the user a concise status update at least every 60 seconds while it is still waiting. Do not end the turn merely because the contact is absent.
 4. Treat `waiting_contact` as normal. `contact_candidate` is provisional; do not claim contact until `contact_qualified` appears.
 5. The three consecutive qualifying frames are promoted and count as accepted frames; the default target is ten total, not three plus ten.
@@ -45,4 +48,13 @@ Example:
   --output "$OUTPUT_DIR/verification.json"
 ```
 
-Report the artifact path, contact epoch count, accepted/rejected/waiting counts, restore status, and verification result. Tag measured values `[COMPUTED]` and instrument identity or saved metadata `[KNOWN]`; include a confidence label.
+For two probes, replace the profile and channel argument with:
+
+```bash
+"$PLUGIN_ROOT/scripts/rigol-cli" session \
+  --config "$WORKSPACE_PROFILE" --output "$OUTPUT_DIR" \
+  --channels 1,2 --trigger-attempt-timeout 5 \
+  --wait-timeout 0 --qualify-consecutive 3 --accepted-count 10
+```
+
+Report the artifact path, selected channels, per-channel qualification, contact epochs, accepted/rejected/waiting counts, restore status, and verification result. Describe dual data as "simultaneously sampled, sequentially downloaded." Tag measured values `[COMPUTED]` and instrument identity or saved metadata `[KNOWN]`; include a confidence label.

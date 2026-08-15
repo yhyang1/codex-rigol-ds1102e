@@ -4,7 +4,7 @@ import numpy as np
 
 from rigol_tool.config import QualificationConfig
 from rigol_tool.instrument import Capture, ChannelWaveform
-from rigol_tool.session import ContactGate, assess_capture
+from rigol_tool.session import ContactGate, assess_capture, assess_channels
 
 
 def pulse_capture(frequency_hz: float = 1000.0, amplitude_v: float = 3.0) -> Capture:
@@ -28,6 +28,17 @@ def pulse_capture(frequency_hz: float = 1000.0, amplitude_v: float = 3.0) -> Cap
         settings={},
         measurements={1: {"frequency_hz": frequency_hz, "vpp_v": amplitude_v}},
     )
+
+
+def dual_pulse_capture(ch2_amplitude_v: float) -> Capture:
+    capture = pulse_capture()
+    ch1 = capture.channels[1]
+    ch2_voltage = np.where(ch1.voltage_v > 0, ch2_amplitude_v, 0.0)
+    ch2_raw = np.clip(125 - ch2_voltage / 0.04, 0, 255).astype(np.uint8)
+    ch2 = ChannelWaveform(2, b"#40000", ch2_raw, ch2_voltage, 1.0, 0.0, 1.0, ch2_raw.size)
+    capture.channels[2] = ch2
+    capture.measurements[2] = {"frequency_hz": 1000.0, "vpp_v": ch2_amplitude_v}
+    return capture
 
 
 def test_contact_gate_requires_consecutive_frames_and_requalifies() -> None:
@@ -70,3 +81,17 @@ def test_capture_qualification_rejects_weak_contact() -> None:
     )
     assert not result.accepted
     assert "vpp_below_minimum" in result.reasons
+
+
+def test_dual_qualification_requires_both_probe_signals() -> None:
+    result = assess_channels(
+        dual_pulse_capture(ch2_amplitude_v=0.1),
+        {
+            1: QualificationConfig(nominal_frequency_hz=1000, min_vpp_v=2),
+            2: QualificationConfig(nominal_frequency_hz=1000, min_vpp_v=2),
+        },
+    )
+
+    assert result.channels[1].accepted
+    assert not result.channels[2].accepted
+    assert not result.accepted

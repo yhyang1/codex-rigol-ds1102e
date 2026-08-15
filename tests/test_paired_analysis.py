@@ -103,3 +103,22 @@ def test_verified_series_applies_expectation_gate(tmp_path: Path) -> None:
     assert report["artifact_verification"]["valid"] is True
     assert report["gate"]["pass"] is True
     assert report["gate"]["paired_count"] == 3
+
+    np.savez_compressed(
+        waveform,
+        time_s=time_s,
+        ch1_voltage_v=strobe_v,
+        ch1_raw_u8=np.zeros(time_s.size, dtype=np.uint8),
+        ch2_voltage_v=trigger_v,
+        ch2_raw_u8=np.zeros(time_s.size, dtype=np.uint8),
+    )
+    metadata = json.loads((capture / "metadata.json").read_text(encoding="utf-8"))
+    metadata["waveform_npz_sha256"] = hashlib.sha256(waveform.read_bytes()).hexdigest()
+    (capture / "metadata.json").write_text(json.dumps(metadata), encoding="utf-8")
+
+    reverse_report_path = analyze_paired_series(tmp_path, 2, 1, expectations)
+    reverse_report = json.loads(reverse_report_path.read_text(encoding="utf-8"))
+
+    assert reverse_report["trigger_channel"] == 2
+    assert reverse_report["strobe_channel"] == 1
+    assert reverse_report["gate"]["pass"] is True

@@ -1,6 +1,6 @@
 # rigol-tool
 
-USB automation and auditable waveform capture for the RIGOL DS1102E.
+USB automation and auditable one- or two-probe waveform capture for the RIGOL DS1102E.
 
 ```bash
 uv sync
@@ -8,6 +8,8 @@ uv run rigol doctor
 uv run rigol capture --output captures --trigger-timeout 10
 uv run rigol watch --output captures --interval 60 --trigger-timeout 10 --count 10
 uv run rigol session --config configs/probe-comp-1khz.toml --output captures/session --channels 1
+uv run rigol session --config configs/probe-comp-two-probe-1khz.toml \
+  --output captures/dual-session --channels 1,2
 uv run rigol verify captures/session --output captures/session/verification.json
 uv run rigol export-csv captures/20260809T120000.000000Z_000001
 uv run rigol analyze captures/20260809T120000.000000Z_000001 --nominal-frequency 1000
@@ -16,9 +18,10 @@ uv run rigol analyze-paired-series captures/session \
   --trigger-channel 1 --strobe-channel 2 --expectations expectations.json
 ```
 
-Use `--config config.toml` to apply an explicit acquisition profile. Without a
-profile, channel, timebase, and trigger parameters are preserved; the waveform
-point mode, trigger sweep, and run state are temporarily changed and restored.
+Use `--config config.toml` to apply an explicit acquisition profile. Selected
+channels are temporarily enabled; otherwise channel, timebase, and trigger
+parameters are preserved. Every changed display, waveform, acquisition,
+trigger, and run-state setting is restored and verified.
 
 The DS1102E must be observed in an armed state before `STOP` is accepted as a
 fresh trigger. A trigger timeout is an error, and every changed setting is
@@ -40,6 +43,25 @@ trigger intervals, and reports trigger period/high width, trigger-to-dependent
 delay, dependent width, logic levels, and missing or extra pulses. Optional
 JSON expectations provide nominal timing and logic-level gates; the result is
 written atomically as `paired-series-analysis.json`.
+
+## Two-probe safety boundary
+
+[KNOWN] Both DS1102E probe ground terminals share the oscilloscope ground
+potential. Before a two-probe USB run, confirm that both ground clips connect
+only to the same circuit ground potential. Do not use two ordinary passive
+probe ground clips across different potentials.
+
+[KNOWN] Each physical probe switch must match its channel's `probe` setting,
+and the signal must remain within the probe and oscilloscope voltage/category
+ratings. The tool configures the oscilloscope; it does not move probes, change
+wiring, energize a DUT, or prove that two chosen ground points are
+equipotential.
+
+[KNOWN] A dual acquisition is simultaneously sampled by the oscilloscope and
+sequentially downloaded over USB. In Normal memory each channel returns 8,192
+RAW points; in Long memory each returns 524,288 RAW points. NORMAL is the
+default two-channel mode because LONG transfers remain unvalidated on this
+bench USB path.
 
 Example profile:
 
@@ -82,14 +104,39 @@ only when the bench USB path has already passed deep-buffer transfer validation.
 
 `session` keeps one USB connection and acquisition configuration active while
 waiting for a trigger. By default it waits indefinitely, requires three
-consecutive qualified CH1 frames before declaring contact, and retains ten
-qualified frames. A timeout or rejected candidate does not end the process.
+consecutive qualified frames before declaring contact, and retains ten
+qualified frames. CH1 is the default; with `--channels 1,2`, both channels must
+pass every candidate. A timeout or rejected candidate does not end the process.
 SIGINT/SIGTERM requests an orderly stop so the original oscilloscope settings
 can be restored and verified.
 
 The profile's `[qualification]` section sets nominal frequency, allowed
 frequency and Vpp ranges, minimum complete pulses, and period-CV limit. Use
 `--wait-timeout SECONDS` only when a finite unattended deadline is intended.
+
+For two-channel `session`, provide independent channel sections. Flat values
+act as shared defaults and nested values override them:
+
+```toml
+[qualification]
+frequency_tolerance_percent = 5
+min_complete_pulses = 3
+max_period_cv_percent = 5
+
+[qualification.channel1]
+nominal_frequency_hz = 1000
+min_vpp_v = 2.0
+max_vpp_v = 4.0
+
+[qualification.channel2]
+nominal_frequency_hz = 1000
+min_vpp_v = 2.0
+max_vpp_v = 4.0
+```
+
+[KNOWN] A two-channel session rejects the entire frame when either selected
+channel fails qualification. This prevents valid CH1 contact from promoting an
+absent or weak CH2 trace.
 
 ## Codex plugin
 
@@ -110,7 +157,8 @@ plugin/rigol-ds1102e/
     ├── rigol-acquire/                  Wait and acquire
     ├── rigol-analyze/                  Verify and analyze artifacts
     ├── rigol-interpret/                Produce interpretation.md
-    └── rigol-run-workflow/             End-to-end orchestration
+    ├── rigol-run-workflow/             One-probe orchestration
+    └── rigol-use-two-probes/           Safe two-probe orchestration
 scripts/package_codex_plugin.py         Build an installable plugin directory
 ```
 
@@ -123,10 +171,11 @@ only copy of a change there.
 
 | Skill | Use | USB access | Output |
 |---|---|---:|---|
-| `rigol-acquire` | [KNOWN] Identify the instrument, wait for delayed or intermittent CH1 contact, require three consecutive qualified frames, and retain ten total frames. | Yes | Capture directory, `events.jsonl`, `verification.json` |
-| `rigol-analyze` | [KNOWN] Verify saved hashes and calculate frequency, timing, pulse-width, missing/extra-pulse, amplitude-outlier, and RAW-buffer-relative phase statistics. | No | `series-analysis.json` |
-| `rigol-interpret` | [KNOWN] Convert verified analysis into evidence-bounded conclusions while preserving CH1-only, calibration, phase, and observation-gap limitations. | No | `interpretation.md` and a chat summary |
-| `rigol-run-workflow` | [KNOWN] Run doctor → wait/acquire → verify → analyze → interpret without skipping failed gates. | Yes, during acquisition | Complete acquisition and report directory |
+| `rigol-acquire` | [KNOWN] Identify the instrument, wait for one or two selected probes, require consecutive all-channel qualification, and retain auditable frames. | Yes | Capture directory, `events.jsonl`, `verification.json` |
+| `rigol-analyze` | [KNOWN] Verify artifacts and calculate per-channel pulse metrics or cross-channel paired timing. | No | `series-analysis.json` or `paired-series-analysis.json` |
+| `rigol-interpret` | [KNOWN] Convert verified one- or two-channel analysis into evidence-bounded conclusions. | No | `interpretation.md` and a chat summary |
+| `rigol-run-workflow` | [KNOWN] Run the CH1 default workflow without skipping failed gates. | Yes, during acquisition | Complete acquisition and report directory |
+| `rigol-use-two-probes` | [KNOWN] Enforce grounding/attenuation confirmation, qualify CH1 and CH2, verify, analyze, and interpret the same-trigger dual capture. | Yes, during acquisition | Complete two-channel acquisition and report directory |
 
 [KNOWN] The first three qualifying frames are provisional until the third
 passes; once contact is established, those three frames are promoted and count
@@ -150,8 +199,10 @@ build/codex-plugin/rigol-ds1102e/scripts/rigol-cli --help
 ```
 
 [KNOWN] The built plugin is written to
-`build/codex-plugin/rigol-ds1102e`. Its bundled default profile is CH1-only,
-1×, nominal 1 kHz, NORMAL memory, and 0.5 ms/div.
+`build/codex-plugin/rigol-ds1102e`. It bundles the validated CH1-only 1X profile
+and a separate unvalidated two-probe 10X configuration template. Both use
+NORMAL memory and 0.5 ms/div; physical probe switches and wiring remain a user
+confirmation gate.
 
 ### First installation into Codex
 
@@ -226,6 +277,10 @@ front-panel test-output captures, analyze them, and write interpretation.md.
 Use $rigol-acquire to arm the DS1102E now and keep waiting while I attach the
 probe. Use CH1 only.
 
+Use $rigol-use-two-probes to confirm a safe common-ground setup, wait until both
+CH1 and CH2 qualify, retain ten same-trigger captures, and analyze CH1-to-CH2
+delay.
+
 Use $rigol-analyze to verify and analyze captures/session at nominal 1000 Hz.
 
 Use $rigol-interpret to explain captures/session/series-analysis.json without
@@ -233,8 +288,9 @@ claiming absolute phase or calibrated frequency accuracy.
 ```
 
 [KNOWN] Before USB configuration writes, the acquisition Skill declares the
-instrument serial, profile, output directory, and command. Codex may request
-sandbox approval for USB access. Review those targets before approving.
+instrument serial, selected channels, trigger source, profile, output directory,
+and command. The two-probe Skill additionally gates attenuation, common ground,
+and voltage/category ratings. Codex may request sandbox approval for USB access.
 
 [KNOWN] To cancel a waiting acquisition, tell Codex to cancel or send SIGINT in
 a manual terminal. The workflow waits for `session_cancelled` and

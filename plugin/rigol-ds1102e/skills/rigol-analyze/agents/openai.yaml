@@ -1,4 +1,4 @@
 interface:
   display_name: "Analyze Waveforms"
-  short_description: "Verify and analyze DS1102E captures"
-  default_prompt: "Use $rigol-analyze to verify and analyze these DS1102E capture artifacts."
+  short_description: "Verify and analyze one or two channels"
+  default_prompt: "Use $rigol-analyze to verify and analyze these one- or two-channel DS1102E artifacts."

@@ -11,20 +11,24 @@ import time
 from .artifacts import export_csv, write_capture, write_event
 from .analysis import analyze_capture, analyze_series
 from .config import load_config
-from .errors import DeviceIdentityError, RigolError, TriggerTimeoutError, WaveformDataError
+from .errors import ConfigurationError, DeviceIdentityError, RigolError, TriggerTimeoutError, WaveformDataError
 from .instrument import CaptureSession, VisaConnection, capture_once, identify
 from .paired_analysis import analyze_paired_series
-from .session import ContactGate, QualificationResult, assess_capture
+from .session import ContactGate, MultiChannelQualificationResult, QualificationResult, assess_channels
 from .verify import verify_artifacts
 
 
 def _channels(value: str) -> tuple[int, ...]:
     try:
-        channels = tuple(dict.fromkeys(int(item.strip()) for item in value.split(",")))
+        channels = tuple(int(item.strip()) for item in value.split(","))
     except ValueError as exc:
         raise argparse.ArgumentTypeError("channels must be 1, 2, or 1,2") from exc
-    if not channels or any(channel not in (1, 2) for channel in channels):
-        raise argparse.ArgumentTypeError("channels must be 1, 2, or 1,2")
+    if (
+        not channels
+        or any(channel not in (1, 2) for channel in channels)
+        or len(set(channels)) != len(channels)
+    ):
+        raise argparse.ArgumentTypeError("channels must be unique and contain only 1 and/or 2")
     return channels
 
 
@@ -206,8 +210,27 @@ def _qualification_payload(result: QualificationResult) -> dict:
     return payload
 
 
+def _multi_qualification_payload(result: MultiChannelQualificationResult) -> dict:
+    return {
+        "accepted": result.accepted,
+        "channels": {
+            str(channel): _qualification_payload(channel_result)
+            for channel, channel_result in result.channels.items()
+        },
+    }
+
+
 def _session(args: argparse.Namespace) -> int:
     config = load_config(args.config)
+    if len(args.channels) > 1:
+        missing_qualifications = [
+            channel for channel in args.channels if channel not in config.qualifications
+        ]
+        if missing_qualifications:
+            raise ConfigurationError(
+                "two-channel session requires [qualification.channel1] and "
+                "[qualification.channel2] definitions"
+            )
     serial = args.serial or config.instrument.serial
     stop = False
 
@@ -221,7 +244,13 @@ def _session(args: argparse.Namespace) -> int:
     accepted_count = 0
     rejected_count = 0
     waiting_attempts = 0
-    provisional_frequency = config.qualification.nominal_frequency_hz
+    channel_qualifications = {
+        channel: config.qualification_for(channel) for channel in args.channels
+    }
+    provisional_frequencies = {
+        channel: qualification.nominal_frequency_hz
+        for channel, qualification in channel_qualifications.items()
+    }
     outcome = "cancelled"
     started = time.monotonic()
     baseline_saved = None
@@ -236,6 +265,7 @@ def _session(args: argparse.Namespace) -> int:
             qualify_consecutive=args.qualify_consecutive,
             accepted_target=args.accepted_count,
             wait_timeout_s=args.wait_timeout,
+            channels=list(args.channels),
         )
         while not stop and accepted_count < args.accepted_count:
             if args.wait_timeout and time.monotonic() - started >= args.wait_timeout:
@@ -285,31 +315,32 @@ def _session(args: argparse.Namespace) -> int:
                                 )
                                 raise
 
-                            result = assess_capture(
+                            result = assess_channels(
                                 capture,
-                                args.channels[0],
-                                config.qualification,
-                                provisional_frequency,
+                                channel_qualifications,
+                                provisional_frequencies,
                             )
                             transition = gate.observe((capture, result), result.accepted)
-                            if result.accepted and config.qualification.nominal_frequency_hz is None:
-                                provisional_frequency = result.reference_frequency_hz
+                            if result.accepted:
+                                for channel, channel_result in result.channels.items():
+                                    if channel_qualifications[channel].nominal_frequency_hz is None:
+                                        provisional_frequencies[channel] = channel_result.reference_frequency_hz
                             if transition.state in {"rejected", "contact_lost"}:
                                 rejected_count += 1
-                                if config.qualification.nominal_frequency_hz is None:
-                                    provisional_frequency = None
+                                for channel, qualification in channel_qualifications.items():
+                                    if qualification.nominal_frequency_hz is None:
+                                        provisional_frequencies[channel] = None
                                 if args.keep_rejected:
                                     write_capture(
                                         capture,
                                         args.output / "rejected",
                                         rejected_count,
-                                        {"qualification": _qualification_payload(result)},
+                                        {"qualification": _multi_qualification_payload(result)},
                                     )
                                 _emit_status(
                                     args.output,
                                     transition.state,
-                                    reasons=list(result.reasons),
-                                    metrics=result.metrics,
+                                    qualification=_multi_qualification_payload(result),
                                     accepted=accepted_count,
                                 )
                                 continue
@@ -319,7 +350,7 @@ def _session(args: argparse.Namespace) -> int:
                                     "contact_candidate",
                                     candidate=transition.candidate_count,
                                     required=args.qualify_consecutive,
-                                    metrics=result.metrics,
+                                    qualification=_multi_qualification_payload(result),
                                 )
                                 continue
                             if transition.state == "contact_qualified":
@@ -341,7 +372,7 @@ def _session(args: argparse.Namespace) -> int:
                                         "session": {
                                             "epoch": transition.epoch,
                                             "accepted_sequence": accepted_count,
-                                            "qualification": _qualification_payload(promoted_result),
+                                            "qualification": _multi_qualification_payload(promoted_result),
                                         }
                                     },
                                 )
@@ -362,8 +393,9 @@ def _session(args: argparse.Namespace) -> int:
                 restored = baseline_saved is None
                 reconnects += 1
                 gate.observe(None, False)
-                if config.qualification.nominal_frequency_hz is None:
-                    provisional_frequency = None
+                for channel, qualification in channel_qualifications.items():
+                    if qualification.nominal_frequency_hz is None:
+                        provisional_frequencies[channel] = None
                 _emit_status(
                     args.output,
                     "transport_waiting",

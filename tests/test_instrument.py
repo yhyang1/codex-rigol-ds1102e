@@ -3,6 +3,7 @@ from collections import defaultdict
 import pytest
 
 from rigol_tool.config import AppConfig
+from rigol_tool.cli import _channels
 from rigol_tool.errors import TriggerTimeoutError
 from rigol_tool.instrument import (
     CaptureSession,
@@ -40,7 +41,11 @@ class FakeInstrument:
             ":TRIG:EDGE:SOUR?": "CH1", ":ACQ:MEMD?": "NORMAL", ":ACQ:TYPE?": "NORMAL",
             ":ACQ:SAMP?": "1000", ":TIM:SCAL?": "0.001", ":TIM:OFFS?": "0",
             ":CHAN1:MEMD?": "600", ":CHAN1:SCAL?": "1", ":CHAN1:OFFS?": "0", ":CHAN1:PROB?": "10",
+            ":CHAN1:DISP?": "ON",
+            ":CHAN2:MEMD?": "600", ":CHAN2:SCAL?": "1", ":CHAN2:OFFS?": "0", ":CHAN2:PROB?": "10",
+            ":CHAN2:DISP?": "OFF",
             ":MEAS:FREQ? CHAN1": "60", ":MEAS:VPP? CHAN1": "8",
+            ":MEAS:FREQ? CHAN2": "60", ":MEAS:VPP? CHAN2": "8",
         })
 
     def query(self, command):
@@ -113,6 +118,11 @@ def test_resource_matching_accepts_decimal_and_hex(resource: str) -> None:
     assert is_ds1102e_resource(resource)
 
 
+def test_cli_rejects_duplicate_channel_selection() -> None:
+    with pytest.raises(Exception, match="unique"):
+        _channels("1,1")
+
+
 def test_capture_and_restore() -> None:
     inst = FakeInstrument(statuses=["RUN", "STOP", "STOP", "WAIT", "STOP", "STOP", "RUN"])
     result = capture_once(inst, "USB::INSTR", identify(inst), AppConfig(), (1,), 1, poll_interval_s=0)
@@ -180,3 +190,34 @@ def test_session_can_wait_then_capture_without_reconfiguring() -> None:
     assert result.time_s.size == 600
     assert inst.writes.count(":ACQ:MEMD LONG") == 1
     assert inst.writes.count(":ACQ:MEMD NORMAL") == 1
+
+
+def test_dual_capture_enables_both_channels_and_restores_display_state() -> None:
+    inst = FakeInstrument(
+        statuses=["RUN", "STOP", "STOP", "WAIT", "STOP", "STOP", "RUN"],
+        blocks=[make_block(8192, 125), make_block(8192, 150)],
+    )
+    inst.values[":CHAN1:MEMD?"] = "8192"
+    inst.values[":CHAN2:MEMD?"] = "8192"
+
+    result = capture_once(inst, "USB::INSTR", identify(inst), AppConfig(), (1, 2), 1, poll_interval_s=0)
+
+    assert result.time_s.size == 8192
+    assert tuple(result.channels) == (1, 2)
+    assert ":CHAN1:DISP ON" in inst.writes
+    assert ":CHAN2:DISP ON" in inst.writes
+    assert ":CHAN2:DISP OFF" in inst.writes
+    assert ":ACQ:MEMD NORMAL" in inst.writes
+    assert inst.writes.index(":WAV:DATA? CHAN1") < inst.writes.index(":WAV:DATA? CHAN2")
+
+
+def test_dual_capture_rejects_unexpected_memory_depth() -> None:
+    inst = FakeInstrument(
+        statuses=["STOP", "STOP", "STOP", "WAIT", "STOP", "STOP", "STOP"],
+        blocks=[make_block(16384)],
+    )
+    inst.values[":CHAN1:MEMD?"] = "16384"
+    inst.values[":CHAN2:MEMD?"] = "16384"
+
+    with pytest.raises(Exception, match="expected 8192"):
+        capture_once(inst, "USB::INSTR", identify(inst), AppConfig(), (1, 2), 1, poll_interval_s=0)

@@ -1,4 +1,4 @@
 interface:
   display_name: "Interpret Results"
   short_description: "Turn waveform evidence into an audited report"
-  default_prompt: "Use $rigol-interpret to explain these DS1102E results and write an audited interpretation report."
+  default_prompt: "Use $rigol-interpret to explain these one- or two-channel DS1102E results in an audited report."

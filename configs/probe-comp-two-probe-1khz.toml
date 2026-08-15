@@ -1,0 +1,48 @@
+[instrument]
+serial = "DS1ET183009083"
+
+[acquisition]
+memory_depth = "NORMAL"
+type = "NORMAL"
+
+[channel1]
+display = true
+coupling = "DC"
+probe = 10
+scale_v_div = 1.0
+offset_v = 0.0
+bandwidth_limit = false
+
+[channel2]
+display = true
+coupling = "DC"
+probe = 10
+scale_v_div = 1.0
+offset_v = 0.0
+bandwidth_limit = false
+
+[trigger]
+mode = "EDGE"
+source = "CHAN1"
+slope = "POSITIVE"
+level_v = 1.5
+coupling = "DC"
+
+[timebase]
+scale_s_div = 0.0005
+offset_s = 0.0
+
+[qualification]
+frequency_tolerance_percent = 5
+min_complete_pulses = 3
+max_period_cv_percent = 5
+
+[qualification.channel1]
+nominal_frequency_hz = 1000
+min_vpp_v = 2.0
+max_vpp_v = 4.0
+
+[qualification.channel2]
+nominal_frequency_hz = 1000
+min_vpp_v = 2.0
+max_vpp_v = 4.0

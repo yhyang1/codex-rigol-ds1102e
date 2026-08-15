@@ -9,6 +9,15 @@ same-trigger CH1/CH2 timing analysis.
 
 ## Evidence basis
 
+Primary references:
+
+- Supplied local manual: `/Users/yangmeng/Downloads/9d3641.pdf` (174 pages,
+  reviewed in rendered form during this iteration).
+- Official RIGOL DS1000E/DS1000D User's Guide:
+  <https://www.rigol.com/dam/global/downloads/brochures/en/user-manual/oscilloscopes/DS1000E_UserGuide_EN.pdf>
+- Official RIGOL DS1000E/DS1000D Programming Guide:
+  <https://eu.rigol.com/eu/Images/DS1000E_ProgrammingGuide_EN_tcm30-2863.pdf>
+
 - The supplied DS1000E/DS1000D User's Guide identifies the DS1102E as a
   two-channel oscilloscope. It requires the attenuation setting of each channel
   to match its physical probe and states that probe ground terminals share the
@@ -141,4 +150,3 @@ Interpretation must preserve these boundaries:
    Skill.
 8. USB bench acceptance remains pending until two safely connected probes are
    available and the user authorizes the declared configuration writes.
-

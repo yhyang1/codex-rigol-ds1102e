@@ -1,11 +1,13 @@
 ---
 name: rigol-run-workflow
-description: Run the complete RIGOL DS1102E CH1 workflow from USB identity and wait-aware contact acquisition through artifact verification, pulse analysis, and interpretation.md. Use for end-to-end bench measurements when the probe may be connected later or is difficult to hold.
+description: Run the complete one-probe RIGOL DS1102E workflow from USB identity and wait-aware CH1 acquisition through verification, pulse analysis, and interpretation.md. Use for end-to-end single-channel bench measurements; route explicit two-probe work to rigol-use-two-probes.
 ---
 
 # Rigol Run Workflow
 
 Run the four gates in order. Do not skip a failed gate.
+
+If the user asks for two probes, CH1/CH2, channel-to-channel delay, or paired timing, use `rigol-use-two-probes` instead of extending this CH1 default implicitly.
 
 ## Gate 1: identify and declare
 

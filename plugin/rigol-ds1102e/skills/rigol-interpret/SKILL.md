@@ -1,6 +1,6 @@
 ---
 name: rigol-interpret
-description: Interpret verified RIGOL DS1102E acquisition and analysis artifacts and write an evidence-bounded Markdown report. Use when the user asks what a waveform means, whether glitches occurred, how precise the reading is, or wants interpretation.md.
+description: Interpret verified one- or two-channel RIGOL DS1102E acquisition and analysis artifacts and write an evidence-bounded Markdown report. Use for waveform meaning, glitches, precision, cross-channel timing, or interpretation.md.
 ---
 
 # Rigol Interpret
@@ -9,7 +9,7 @@ Interpret artifacts; do not invent additional measurements. This skill does not 
 
 ## Inputs and checks
 
-Read `metadata.json`, `events.jsonl`, verification output, and `series-analysis.json` when present. If series analysis is absent, use the `rigol-analyze` skill first. Trace every numerical statement to a saved field or an explicit calculation.
+Read `metadata.json`, `events.jsonl`, verification output, and `series-analysis.json` or `paired-series-analysis.json` when present. If the needed analysis is absent, use `rigol-analyze` first. Trace every numerical statement to a saved field or explicit calculation.
 
 ## Required output
 
@@ -17,8 +17,8 @@ Write the report beside the analyzed run as `interpretation.md`. Never overwrite
 
 Use exactly these report sections:
 
-1. `Evidence` — instrument identity, profile, CH1-only scope, timestamps, capture count, qualification and restoration evidence.
-2. `Computed Results` — frequency distribution, error relative to the declared nominal, complete-pulse glitch totals, pulse/amplitude findings, and trigger-relative phase diagnostics.
+1. `Evidence` — instrument identity, profile, selected channels, timestamps, capture count, per-channel qualification, and restoration evidence.
+2. `Computed Results` — per-channel metrics and, when requested, paired delay/width/missing/extra-pulse results.
 3. `Interpretation` — bounded conclusions supported by those results.
 4. `Limitations` — scope timebase calibration, sample interval, trigger-relative phase reference, single-channel limits, and duration limits.
 5. `Artifact Index` — relative links to verification, event, metadata, waveform, analysis, and report artifacts.
@@ -31,5 +31,7 @@ Use exactly these report sections:
 - Do not call nominal comparison a traceable accuracy measurement unless calibration evidence is present.
 - Do not turn RAW-buffer trigger-relative phase into absolute or connector-to-connector phase.
 - If the requested conclusion needs CH2 or an independent time reference, first line: `I don't know.` Then state exactly what measurement is missing.
+- For dual captures, say "simultaneously sampled, sequentially downloaded" and never derive timing from USB transfer order.
+- Keep the specified typical 500 ps inter-channel delay separate from measured sample-derived delay; do not automatically subtract it.
 - If artifacts fail verification, do not interpret them as valid measurements.
 - Treat user-declared physical setup separately from artifact-proven identity and settings. Label representative artifact links as representative.

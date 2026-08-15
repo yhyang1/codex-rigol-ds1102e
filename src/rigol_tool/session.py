@@ -19,6 +19,12 @@ class QualificationResult:
 
 
 @dataclass(frozen=True)
+class MultiChannelQualificationResult:
+    accepted: bool
+    channels: dict[int, QualificationResult]
+
+
+@dataclass(frozen=True)
 class GateTransition:
     state: str
     promoted: tuple[Any, ...]
@@ -150,4 +156,30 @@ def assess_capture(
             "period_cv_percent": period_cv,
         },
         reference_frequency_hz=reference,
+    )
+
+
+def assess_channels(
+    capture: Capture,
+    qualifications: dict[int, QualificationConfig],
+    provisional_frequencies_hz: dict[int, float | None] | None = None,
+) -> MultiChannelQualificationResult:
+    if not qualifications:
+        raise ValueError("qualifications must contain at least one selected channel")
+    missing = set(qualifications) - set(capture.channels)
+    if missing:
+        raise ValueError(f"capture is missing qualification channels: {sorted(missing)}")
+    provisional = provisional_frequencies_hz or {}
+    results = {
+        channel: assess_capture(
+            capture,
+            channel,
+            qualification,
+            provisional.get(channel),
+        )
+        for channel, qualification in qualifications.items()
+    }
+    return MultiChannelQualificationResult(
+        accepted=all(result.accepted for result in results.values()),
+        channels=results,
     )

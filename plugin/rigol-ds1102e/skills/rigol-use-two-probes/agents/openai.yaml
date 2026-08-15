@@ -1,0 +1,4 @@
+interface:
+  display_name: "Use Two Probes"
+  short_description: "Safely capture and compare CH1 and CH2"
+  default_prompt: "Use $rigol-use-two-probes to safely capture and analyze both DS1102E probes."

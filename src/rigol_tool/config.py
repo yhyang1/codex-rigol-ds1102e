@@ -62,6 +62,10 @@ class AppConfig:
     timebase: TimebaseConfig = field(default_factory=TimebaseConfig)
     trigger: TriggerConfig = field(default_factory=TriggerConfig)
     qualification: QualificationConfig = field(default_factory=QualificationConfig)
+    qualifications: dict[int, QualificationConfig] = field(default_factory=dict)
+
+    def qualification_for(self, channel: int) -> QualificationConfig:
+        return self.qualifications.get(channel, self.qualification)
 
 
 def _only_keys(section: str, value: dict[str, Any], allowed: set[str]) -> None:
@@ -101,6 +105,53 @@ def _channel(section: str, raw: dict[str, Any]) -> ChannelConfig:
     )
 
 
+_QUALIFICATION_KEYS = {
+    "nominal_frequency_hz",
+    "frequency_tolerance_percent",
+    "min_vpp_v",
+    "max_vpp_v",
+    "min_complete_pulses",
+    "max_period_cv_percent",
+}
+
+
+def _qualification(
+    section: str,
+    raw: dict[str, Any],
+    base: QualificationConfig | None = None,
+) -> QualificationConfig:
+    _only_keys(section, raw, _QUALIFICATION_KEYS)
+    defaults = base or QualificationConfig()
+    min_vpp = raw.get("min_vpp_v", defaults.min_vpp_v)
+    max_vpp = raw.get("max_vpp_v", defaults.max_vpp_v)
+    if min_vpp is not None and float(min_vpp) < 0:
+        raise ConfigurationError(f"{section}.min_vpp_v must be non-negative")
+    if max_vpp is not None and float(max_vpp) <= 0:
+        raise ConfigurationError(f"{section}.max_vpp_v must be positive")
+    if min_vpp is not None and max_vpp is not None and float(min_vpp) >= float(max_vpp):
+        raise ConfigurationError(f"{section}.min_vpp_v must be less than max_vpp_v")
+    min_pulses = int(raw.get("min_complete_pulses", defaults.min_complete_pulses))
+    if min_pulses < 2:
+        raise ConfigurationError(f"{section}.min_complete_pulses must be at least 2")
+    return QualificationConfig(
+        nominal_frequency_hz=_positive(
+            f"{section}.nominal_frequency_hz",
+            raw.get("nominal_frequency_hz", defaults.nominal_frequency_hz),
+        ),
+        frequency_tolerance_percent=_positive(
+            f"{section}.frequency_tolerance_percent",
+            raw.get("frequency_tolerance_percent", defaults.frequency_tolerance_percent),
+        ),
+        min_vpp_v=float(min_vpp) if min_vpp is not None else None,
+        max_vpp_v=float(max_vpp) if max_vpp is not None else None,
+        min_complete_pulses=min_pulses,
+        max_period_cv_percent=_positive(
+            f"{section}.max_period_cv_percent",
+            raw.get("max_period_cv_percent", defaults.max_period_cv_percent),
+        ),
+    )
+
+
 def load_config(path: Path | None) -> AppConfig:
     if path is None:
         return AppConfig()
@@ -122,18 +173,7 @@ def load_config(path: Path | None) -> AppConfig:
     _only_keys("acquisition", acquisition, {"memory_depth", "type"})
     _only_keys("timebase", timebase, {"scale_s_div", "offset_s"})
     _only_keys("trigger", trigger, {"mode", "source", "slope", "level_v", "coupling"})
-    _only_keys(
-        "qualification",
-        qualification,
-        {
-            "nominal_frequency_hz",
-            "frequency_tolerance_percent",
-            "min_vpp_v",
-            "max_vpp_v",
-            "min_complete_pulses",
-            "max_period_cv_percent",
-        },
-    )
+    _only_keys("qualification", qualification, _QUALIFICATION_KEYS | {"channel1", "channel2"})
     channels = {
         index: _channel(f"channel{index}", raw[f"channel{index}"])
         for index in (1, 2)
@@ -141,17 +181,19 @@ def load_config(path: Path | None) -> AppConfig:
     }
     source = _choice("trigger.source", trigger.get("source"), {"CHAN1", "CHAN2", "EXT", "ACLINE"})
     mode = _choice("trigger.mode", trigger.get("mode"), {"EDGE"})
-    min_vpp = qualification.get("min_vpp_v")
-    max_vpp = qualification.get("max_vpp_v")
-    if min_vpp is not None and float(min_vpp) < 0:
-        raise ConfigurationError("qualification.min_vpp_v must be non-negative")
-    if max_vpp is not None and float(max_vpp) <= 0:
-        raise ConfigurationError("qualification.max_vpp_v must be positive")
-    if min_vpp is not None and max_vpp is not None and float(min_vpp) >= float(max_vpp):
-        raise ConfigurationError("qualification.min_vpp_v must be less than max_vpp_v")
-    min_pulses = int(qualification.get("min_complete_pulses", 3))
-    if min_pulses < 2:
-        raise ConfigurationError("qualification.min_complete_pulses must be at least 2")
+    flat_qualification = _qualification(
+        "qualification",
+        {key: value for key, value in qualification.items() if key in _QUALIFICATION_KEYS},
+    )
+    qualifications = {
+        index: _qualification(
+            f"qualification.channel{index}",
+            qualification[f"channel{index}"],
+            flat_qualification,
+        )
+        for index in (1, 2)
+        if f"channel{index}" in qualification
+    }
     return AppConfig(
         instrument=InstrumentConfig(serial=instrument.get("serial")),
         acquisition=AcquisitionConfig(
@@ -170,20 +212,6 @@ def load_config(path: Path | None) -> AppConfig:
             level_v=trigger.get("level_v"),
             coupling=_choice("trigger.coupling", trigger.get("coupling"), {"DC", "AC", "HF", "LF"}),
         ),
-        qualification=QualificationConfig(
-            nominal_frequency_hz=_positive(
-                "qualification.nominal_frequency_hz", qualification.get("nominal_frequency_hz")
-            ),
-            frequency_tolerance_percent=_positive(
-                "qualification.frequency_tolerance_percent",
-                qualification.get("frequency_tolerance_percent", 5.0),
-            ),
-            min_vpp_v=float(min_vpp) if min_vpp is not None else None,
-            max_vpp_v=float(max_vpp) if max_vpp is not None else None,
-            min_complete_pulses=min_pulses,
-            max_period_cv_percent=_positive(
-                "qualification.max_period_cv_percent",
-                qualification.get("max_period_cv_percent", 5.0),
-            ),
-        ),
+        qualification=flat_qualification,
+        qualifications=qualifications,
     )

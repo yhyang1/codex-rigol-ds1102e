@@ -47,3 +47,36 @@ def test_invalid_qualification_range_is_rejected(tmp_path: Path) -> None:
     profile.write_text("[qualification]\nmin_vpp_v = 4\nmax_vpp_v = 2\n")
     with pytest.raises(ConfigurationError):
         load_config(profile)
+
+
+def test_per_channel_qualification_inherits_flat_defaults(tmp_path: Path) -> None:
+    profile = tmp_path / "dual.toml"
+    profile.write_text(
+        """
+[qualification]
+frequency_tolerance_percent = 4
+min_complete_pulses = 4
+[qualification.channel1]
+nominal_frequency_hz = 1000
+min_vpp_v = 2
+[qualification.channel2]
+nominal_frequency_hz = 30
+min_vpp_v = 1
+"""
+    )
+
+    config = load_config(profile)
+
+    assert config.qualification_for(1).nominal_frequency_hz == 1000
+    assert config.qualification_for(2).nominal_frequency_hz == 30
+    assert config.qualification_for(2).frequency_tolerance_percent == 4
+    assert config.qualification_for(2).min_complete_pulses == 4
+
+
+def test_invalid_nested_qualification_range_is_rejected(tmp_path: Path) -> None:
+    profile = tmp_path / "bad-dual.toml"
+    profile.write_text(
+        "[qualification.channel2]\nmin_vpp_v = 4\nmax_vpp_v = 2\n"
+    )
+    with pytest.raises(ConfigurationError, match="qualification.channel2"):
+        load_config(profile)

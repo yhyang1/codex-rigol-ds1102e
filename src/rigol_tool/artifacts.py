@@ -15,7 +15,7 @@ from .errors import ArtifactError
 from .instrument import Capture
 
 
-SCHEMA_VERSION = 1
+SCHEMA_VERSION = 2
 
 
 def _json_default(value: Any) -> Any:
@@ -105,6 +105,12 @@ def write_capture(
             "trigger_wait_s": capture.trigger_wait_s,
             "transfer_s": capture.transfer_s,
             "point_count": int(capture.time_s.size),
+            "acquisition": {
+                "channel_mode": "dual" if len(capture.channels) == 2 else "single",
+                "selected_channels": list(capture.channels),
+                "sample_alignment": "simultaneously_sampled_sequentially_downloaded",
+                "transfer_order": list(capture.channels),
+            },
             "settings": capture.settings,
             "channels": {
                 str(number): {
