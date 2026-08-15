@@ -55,7 +55,7 @@ class Capture:
     trigger_wait_s: float
     transfer_s: float
     settings: dict[str, str]
-    measurements: dict[int, dict[str, float]]
+    measurements: dict[int, dict[str, float | None]]
 
 
 @dataclass(frozen=True)
@@ -502,10 +502,16 @@ class CaptureSession:
             ":ACQ:MEMD?": query(self.inst, ":ACQ:MEMD?"),
             ":ACQ:TYPE?": query(self.inst, ":ACQ:TYPE?"),
         }
+        def optional_measurement(command: str) -> float | None:
+            response = query(self.inst, command).strip()
+            if response.startswith((">", "<")):
+                return None
+            return float(response)
+
         measurements = {
             channel: {
-                "frequency_hz": float(query(self.inst, f":MEAS:FREQ? CHAN{channel}")),
-                "vpp_v": float(query(self.inst, f":MEAS:VPP? CHAN{channel}")),
+                "frequency_hz": optional_measurement(f":MEAS:FREQ? CHAN{channel}"),
+                "vpp_v": optional_measurement(f":MEAS:VPP? CHAN{channel}"),
             }
             for channel in self.channels
         }

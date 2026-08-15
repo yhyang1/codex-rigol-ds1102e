@@ -126,6 +126,15 @@ def test_capture_and_restore() -> None:
     assert inst.writes.index(":TRIG:EDGE:SWE SING") < inst.writes.index(":STOP")
 
 
+def test_capture_tolerates_overrange_measurement() -> None:
+    inst = FakeInstrument(statuses=["RUN", "STOP", "STOP", "WAIT", "STOP", "STOP", "RUN"])
+    inst.values[":MEAS:FREQ? CHAN1"] = ">2.50e+04"
+
+    result = capture_once(inst, "USB::INSTR", identify(inst), AppConfig(), (1,), 1, poll_interval_s=0)
+
+    assert result.measurements[1]["frequency_hz"] is None
+
+
 def test_first_screen_block_is_discarded_for_deep_capture() -> None:
     inst = FakeInstrument(
         statuses=["STOP", "STOP", "STOP", "WAIT", "STOP", "STOP", "STOP"],
