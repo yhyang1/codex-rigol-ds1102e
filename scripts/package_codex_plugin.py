@@ -18,6 +18,22 @@ def _copytree(source: Path, target: Path) -> None:
     )
 
 
+def _materialize_venv_interpreter(runtime: Path) -> None:
+    """Keep the packaged runtime executable when an installer drops symlinks."""
+    interpreter = runtime / ".venv" / "bin" / "python"
+    if not interpreter.exists():
+        raise FileNotFoundError(f"packaged Python interpreter missing: {interpreter}")
+    if not interpreter.is_symlink():
+        return
+
+    resolved = interpreter.resolve(strict=True)
+    temporary = interpreter.with_name(".python.materializing")
+    if temporary.exists():
+        temporary.unlink()
+    shutil.copy2(resolved, temporary)
+    temporary.replace(interpreter)
+
+
 def package(output_root: Path, sync: bool = True) -> Path:
     output_root = output_root.resolve()
     target = output_root / PLUGIN_NAME
@@ -40,6 +56,7 @@ def package(output_root: Path, sync: bool = True) -> Path:
             ["uv", "sync", "--frozen", "--no-dev", "--no-editable", "--project", str(runtime)],
             check=True,
         )
+        _materialize_venv_interpreter(runtime)
     return target
 
 

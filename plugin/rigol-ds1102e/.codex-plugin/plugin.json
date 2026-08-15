@@ -1,6 +1,6 @@
 {
   "name": "rigol-ds1102e",
-  "version": "0.1.0+codex.20260815060129",
+  "version": "0.1.0+codex.20260815062433",
   "description": "Safe USB preflight, mixed pulse/static acquisition, verification, analysis, and interpretation for one or two RIGOL DS1102E probes.",
   "author": {
     "name": "yangmeng",
